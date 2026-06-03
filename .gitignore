@@ -1,0 +1,7 @@
+# Build artifacts
+/rubix
+/rubix-ev3
+*.exe
+
+# Generated pruning-table cache
+/tables/*.prt
