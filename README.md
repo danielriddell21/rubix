@@ -17,20 +17,20 @@ Requires Go 1.26+.
 
 ```sh
 # list the solvers, in the order the videos introduce them
-go run . solvers
+go run ./cmd/rubix solvers
 
 # make a scramble and print its 54-sticker facelet string
-go run . scramble -n 25 -seed 1
+go run ./cmd/rubix scramble -n 25 -seed 1
 
 # solve a facelet string (URFDLB scheme); --strategy picks the solver
-go run . solve --input <54-chars> --strategy multi
+go run ./cmd/rubix solve --input <54-chars> --strategy multi
 
 # pipe a scramble straight into a solve
-go run . scramble -n 25 -seed 1 | awk '/facelets/{print $2}' \
-  | xargs -I{} go run . solve --input {} --strategy prune
+go run ./cmd/rubix scramble -n 25 -seed 1 | awk '/facelets/{print $2}' \
+  | xargs -I{} go run ./cmd/rubix solve --input {} --strategy prune
 
 # print the robot move/primitive plan instead of driving hardware
-go run . solve --input <54-chars> --strategy prune --execute
+go run ./cmd/rubix solve --input <54-chars> --strategy prune --execute
 ```
 
 `verify` validates a facelet string, `scan` reads a cube from the robot, and
@@ -78,7 +78,7 @@ dependency-light.
 |-------|---------|------|
 | headless (default) | `go build ./...` | CLI + mock robot |
 | with visualizer | `go build -tags ebiten ./...` | Ebiten cube view (needs a desktop with X11/OpenGL) |
-| EV3 brick | `CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -tags ev3 -o rubix-ev3 .` | ev3dev motors + colour sensor |
+| EV3 brick | `CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -tags ev3 -o rubix-ev3 ./cmd/rubix` | ev3dev motors + colour sensor |
 
 `--view` (on `solve`) and the `view` command open the visualizer; `--execute` and the
 `scan` command use the robot. Without the relevant tag both degrade gracefully (the
