@@ -21,8 +21,13 @@ func (cfopSolver) Name() string     { return "cfop" }
 func (cfopSolver) Describe() string { return "CFOP: Cross, F2L, OLL, PLL (table-guided staged search)" }
 
 func (cfopSolver) Solve(c cube.Cube) (Result, error) {
-	return timed("cfop", c, func(c cube.Cube) ([]cube.Move, uint64, error) {
-		return cfopSolve(c)
+	return timed("cfop", c, func(c cube.Cube) ([]cube.Move, bool, uint64, error) {
+		moves, nodes, err := cfopSolve(c)
+		if err != nil {
+			// A stage that exceeds its depth is a give-up, not a hard error.
+			return moves, false, nodes, nil
+		}
+		return moves, c.Applied(moves...).IsSolved(), nodes, nil
 	})
 }
 

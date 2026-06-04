@@ -12,10 +12,11 @@ import (
 
 // Result is the outcome of a solve.
 type Result struct {
-	Moves    []cube.Move   // solution applied to the input cube yields the solved cube
+	Moves    []cube.Move   // moves played; when Solved, applying them solves the cube
 	Strategy string        // solver name
 	Nodes    uint64        // search nodes expanded (0 if not search-based)
 	Elapsed  time.Duration // wall-clock solve time
+	Solved   bool          // false when the solver legitimately gave up (faithful to the videos)
 }
 
 // Solver turns a scrambled cube into a sequence of moves that solves it.
@@ -72,15 +73,18 @@ func Names() []string {
 	return out
 }
 
-// timed runs solve and stamps the result's strategy and elapsed time.
-func timed(name string, c cube.Cube, solve func(cube.Cube) ([]cube.Move, uint64, error)) (Result, error) {
+// timed runs solve and stamps the result's strategy and elapsed time. The solve
+// function reports whether it actually solved the cube; a solver returning solved=false
+// has legitimately given up (not an error). Any solution it claims is sanity-checked.
+func timed(name string, c cube.Cube, solve func(cube.Cube) (moves []cube.Move, solved bool, nodes uint64, err error)) (Result, error) {
 	start := time.Now()
-	moves, nodes, err := solve(c)
+	moves, solved, nodes, err := solve(c)
+	elapsed := time.Since(start)
 	if err != nil {
 		return Result{}, err
 	}
-	if !c.Applied(moves...).IsSolved() {
+	if solved && !c.Applied(moves...).IsSolved() {
 		return Result{}, fmt.Errorf("%s: produced an invalid solution", name)
 	}
-	return Result{Moves: moves, Strategy: name, Nodes: nodes, Elapsed: time.Since(start)}, nil
+	return Result{Moves: moves, Strategy: name, Nodes: nodes, Elapsed: elapsed, Solved: solved}, nil
 }
