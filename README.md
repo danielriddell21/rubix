@@ -52,8 +52,8 @@ dictionary) and a **domino two-phase** search.
 | 3 | `oriented` | orient all edges, then solve with F/B turns removed | ~99% |
 | 4 | `cfop`     | Cross → F2L → OLL → PLL, staged | 100%, ~56 moves |
 | 5 | `domino`   | reduce to the domino group, then solve it | ~95%, ~26 moves |
-| 6 | `iddfs`    | domino search via iterative deepening | high |
-| 7 | `idastar`  | + a cheap admissible lower bound | high |
+| 6 | `iddfs`    | domino search via iterative deepening | ~95% |
+| 7 | `idastar`  | + a cheap admissible lower bound | ~98% |
 | 8 | `prune`    | + exact prune tables (big speedup) | 100%, ~23 moves |
 | 9 | `multi`    | try many reductions, keep the shortest | 100%, ~20 moves |
 
@@ -63,11 +63,17 @@ later ones exist; `prune` and `multi` always solve. Run `DIAG=1 go test
 
 ## Architecture
 
-```
-facelet string ─┐
-   EV3 scan ─────┤→  cube.Cube  →  solver  →  []Move  ─┬→ print
-   (real cube)   │   (one model)                       ├→ EV3 execute
-                 └─────────────── Ebiten view ─────────┘
+```mermaid
+flowchart LR
+    FS["facelet string"] --> M
+    SCAN["EV3 scan<br/>(real cube)"] --> M
+    SCR["scramble"] --> M
+    M["cube.Cube<br/>(one shared model)"] --> SOL["solver"]
+    SOL --> MV["moves"]
+    MV --> PR["print"]
+    MV --> EX["EV3 execute"]
+    M -. live state .-> V["Ebiten view"]
+    MV -. animate .-> V
 ```
 
 Everything is the one `internal/cube` model. The visualizer and the robot are
