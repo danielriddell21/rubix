@@ -66,7 +66,7 @@ commands:
   verify      validate a facelet string
   scan        scan a cube with the robot and print its facelets
   gen-tables  precompute and cache the prune tables
-  view        open the visualizer on a cube (needs -tags ebiten)
+  view        open the self-driving visualizer (needs -tags ebiten)
 
 run "rubix <command> -h" for command flags.
 `)
@@ -146,22 +146,41 @@ func cmdSolve(args []string) error {
 		}
 	}
 	if *view {
-		return gui.Play(c, res.Moves, scrambleResolver(s))
+		return gui.Play(guiController(&c, strategyIndex(*strategy)))
 	}
 	return nil
 }
 
-// scrambleResolver returns a closure that produces a fresh random scramble and its
-// solution, used by the visualizer's in-app re-scramble ("r" key).
-func scrambleResolver(s solver.Solver) func() (cube.Cube, []cube.Move) {
-	return func() (cube.Cube, []cube.Move) {
-		c := cube.ScrambledCube(25, rand.Int64())
-		res, err := s.Solve(c)
-		if err != nil || !res.Solved {
-			return c, nil
-		}
-		return c, res.Moves
+// guiController wires the visualizer to the solver: a strategy list, a fresh-scramble
+// source and a solve function. initial, if set, is the cube shown on load.
+func guiController(initial *cube.Cube, start int) gui.Controller {
+	return gui.Controller{
+		Strategies: solver.Names(),
+		Start:      start,
+		Initial:    initial,
+		Scramble:   func() cube.Cube { return cube.ScrambledCube(25, rand.Int64()) },
+		Solve: func(name string, c cube.Cube) []cube.Move {
+			s, err := solver.Get(name)
+			if err != nil {
+				return nil
+			}
+			res, err := s.Solve(c)
+			if err != nil || !res.Solved {
+				return nil
+			}
+			return res.Moves
+		},
 	}
+}
+
+// strategyIndex returns the registry index of a solver name (0 if unknown).
+func strategyIndex(name string) int {
+	for i, n := range solver.Names() {
+		if n == name {
+			return i
+		}
+	}
+	return 0
 }
 
 func cmdSolvers([]string) error {
@@ -238,27 +257,10 @@ func cmdGenTables(args []string) error {
 
 func cmdView(args []string) error {
 	fs := flag.NewFlagSet("view", flag.ContinueOnError)
-	input := fs.String("input", "", "54-character facelet string, or @- for stdin")
-	strategy := fs.String("strategy", "prune", "solver to animate")
-	solve := fs.Bool("solve", true, "solve and animate (otherwise just show the cube)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	c, err := cubeFromInput(*input, false, nil)
-	if err != nil {
-		return err
-	}
-	s, err := solver.Get(*strategy)
-	if err != nil {
-		return err
-	}
-	var moves []cube.Move
-	if *solve {
-		res, err := s.Solve(c)
-		if err != nil {
-			return err
-		}
-		moves = res.Moves
-	}
-	return gui.Play(c, moves, scrambleResolver(s))
+	// The visualizer is self-driving: it scrambles and solves on its own; press "r"
+	// for a new scramble and "s" to switch solver.
+	return gui.Play(guiController(nil, strategyIndex("multi")))
 }

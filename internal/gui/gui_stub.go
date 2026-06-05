@@ -4,17 +4,13 @@
 // ebiten build tag it is a stub, so default and EV3 builds carry no GUI dependency.
 package gui
 
-import (
-	"errors"
-
-	"github.com/danielriddell21/rubix/internal/cube"
-)
+import "errors"
 
 // Available reports whether the visualizer was compiled in.
 func Available() bool { return false }
 
-// Play would animate the solution from the given start cube. In the stub build it
-// returns an error directing the user to rebuild with the ebiten tag.
-func Play(start cube.Cube, moves []cube.Move, resolve func() (cube.Cube, []cube.Move)) error {
+// Play would open the visualizer. In the stub build it returns an error directing the
+// user to rebuild with the ebiten tag.
+func Play(ctrl Controller) error {
 	return errors.New("visualizer not built into this binary; rebuild with: go build -tags ebiten")
 }
