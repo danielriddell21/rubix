@@ -52,6 +52,10 @@ go run -tags ebiten ./cmd/rubix view \
 go run -tags ebiten ./cmd/rubix solve --input <54-chars> --strategy multi --view
 ```
 
+It renders a 3D cube you can **orbit** (drag the mouse or use the arrow keys) and
+**unfold into a flat net and back** (press space), while it animates the solution
+move by move.
+
 Needs a desktop with OpenGL/X11 (it opens a real window, so not over plain SSH or in
 a container). On Debian/Ubuntu install the dev libraries once:
 `sudo apt install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev`.
