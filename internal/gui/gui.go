@@ -1,8 +1,8 @@
 //go:build ebiten
 
 // Package gui is an Ebiten visualizer of the live cube state. It renders the shared
-// cube.Cube as a real 3D cube you can orbit, animates a solution move by move, and
-// can unfold into a flat net and back. Built only with the `ebiten` tag.
+// cube.Cube as a real 3D cube (raised plastic tiles) you can orbit, x-ray, animate
+// move by move, and unfold into a flat net and back. Built only with the `ebiten` tag.
 package gui
 
 import (
@@ -23,10 +23,12 @@ import (
 const (
 	winW          = 640
 	winH          = 640
-	scale         = 42 // world units → pixels
+	scale         = 40 // world units → pixels
 	framesPerMove = 20 // solve animation pacing
 	orbitSpeed    = 0.035
 	unfoldSpeed   = 0.04
+	tileInset     = 0.12 // gap around each tile (plastic shows through)
+	tileRaise     = 0.16 // how far each coloured tile stands proud of the body
 )
 
 var palette = [6]color.RGBA{
@@ -38,7 +40,10 @@ var palette = [6]color.RGBA{
 	cube.ColB: {40, 90, 210, 255},   // blue
 }
 
-var outline = color.RGBA{12, 12, 14, 255}
+var (
+	plastic = color.RGBA{20, 20, 24, 255}
+	outline = color.RGBA{10, 10, 12, 255}
+)
 
 // whiteSub is a 1px white source used to fill vector triangles with a flat colour.
 var whiteSub *ebiten.Image
@@ -61,24 +66,58 @@ func lerp(a, b vec3, t float32) vec3 {
 	return vec3{a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t, a.z + (b.z-a.z)*t}
 }
 
-// quad holds a sticker's 3D corners (in both cube and net layouts), its face and the
-// cell within that face, and the cube-space normal used for lighting.
-type quad struct {
+type pkind int
+
+const (
+	kBody pkind = iota // dark plastic cell base
+	kTop               // coloured sticker top (gets the live facelet colour)
+	kSide              // plastic bevel wall of a raised tile
+)
+
+// poly is one drawable quad, with matching corners on the solid cube and in the flat
+// net so it can morph between them. tops carry a face/cell for their live colour.
+type poly struct {
 	cube, net [4]vec3
 	normal    vec3
+	kind      pkind
 	face      cube.Color
 	cell      int
 }
 
-// stickers builds the 54 sticker quads once: their positions on the solid cube, the
-// same stickers laid out flat in an unfolded cross, and a per-face normal.
-func stickers() []quad {
-	// face basis in cube space: origin = top-left corner (viewed from outside),
-	// u = one column step (right), v = one row step (down). Cube spans [-1.5,1.5].
-	type basis struct {
-		origin, u, v, n vec3
+type basis struct{ origin, u, v, n vec3 }
+
+type shape struct {
+	pts  [4]vec3
+	kind pkind
+}
+
+// cellShapes builds the six quads of one raised tile: a plastic base filling the cell,
+// a coloured top inset and raised along the normal, and four plastic bevel walls.
+func cellShapes(b basis, c, r int) [6]shape {
+	A := b.origin.add(b.u.scale(float32(c))).add(b.v.scale(float32(r)))
+	B := A.add(b.u)
+	C := B.add(b.v)
+	D := A.add(b.v)
+	iA := A.add(b.u.scale(tileInset)).add(b.v.scale(tileInset))
+	iB := B.sub(b.u.scale(tileInset)).add(b.v.scale(tileInset))
+	iC := C.sub(b.u.scale(tileInset)).sub(b.v.scale(tileInset))
+	iD := D.add(b.u.scale(tileInset)).sub(b.v.scale(tileInset))
+	hn := b.n.scale(tileRaise)
+	tA, tB, tC, tD := iA.add(hn), iB.add(hn), iC.add(hn), iD.add(hn)
+	return [6]shape{
+		{[4]vec3{A, B, C, D}, kBody},
+		{[4]vec3{tA, tB, tC, tD}, kTop},
+		{[4]vec3{iA, iB, tB, tA}, kSide},
+		{[4]vec3{iB, iC, tC, tB}, kSide},
+		{[4]vec3{iC, iD, tD, tC}, kSide},
+		{[4]vec3{iD, iA, tA, tD}, kSide},
 	}
-	b := [6]basis{
+}
+
+// buildPolys generates every drawable quad once: each face's nine raised tiles, in
+// both the solid-cube layout and the flat unfolded-net layout.
+func buildPolys() []poly {
+	cubeB := [6]basis{
 		cube.ColU: {vec3{-1.5, 1.5, -1.5}, vec3{1, 0, 0}, vec3{0, 0, 1}, vec3{0, 1, 0}},
 		cube.ColR: {vec3{1.5, 1.5, 1.5}, vec3{0, 0, -1}, vec3{0, -1, 0}, vec3{1, 0, 0}},
 		cube.ColF: {vec3{-1.5, 1.5, 1.5}, vec3{1, 0, 0}, vec3{0, -1, 0}, vec3{0, 0, 1}},
@@ -86,7 +125,6 @@ func stickers() []quad {
 		cube.ColL: {vec3{-1.5, 1.5, -1.5}, vec3{0, 0, 1}, vec3{0, -1, 0}, vec3{-1, 0, 0}},
 		cube.ColB: {vec3{1.5, 1.5, -1.5}, vec3{-1, 0, 0}, vec3{0, -1, 0}, vec3{0, 0, -1}},
 	}
-	// net layout: top-left of each face in the flat cross (x right, y up), centred.
 	netTL := [6]vec3{
 		cube.ColU: {-1.5, 4.5, 0},
 		cube.ColR: {1.5, 1.5, 0},
@@ -96,19 +134,24 @@ func stickers() []quad {
 		cube.ColB: {4.5, 1.5, 0},
 	}
 	netCentre := vec3{1.5, 1.5, 0}
-	nu, nv := vec3{1, 0, 0}, vec3{0, -1, 0}
+	nu, nv, nn := vec3{1, 0, 0}, vec3{0, -1, 0}, vec3{0, 0, 1}
 
-	var out []quad
+	var out []poly
 	for face := range 6 {
 		f := cube.Color(face)
-		bs := b[f]
+		cb := cubeB[f]
+		nb := basis{origin: netTL[f].sub(netCentre), u: nu, v: nv, n: nn}
 		for r := range 3 {
 			for c := range 3 {
-				co := bs.origin.add(bs.u.scale(float32(c))).add(bs.v.scale(float32(r)))
-				cq := [4]vec3{co, co.add(bs.u), co.add(bs.u).add(bs.v), co.add(bs.v)}
-				no := netTL[f].sub(netCentre).add(nu.scale(float32(c))).add(nv.scale(float32(r)))
-				nq := [4]vec3{no, no.add(nu), no.add(nu).add(nv), no.add(nv)}
-				out = append(out, quad{cube: cq, net: nq, normal: bs.n, face: f, cell: r*3 + c})
+				cs := cellShapes(cb, c, r)
+				ns := cellShapes(nb, c, r)
+				for i := range cs {
+					out = append(out, poly{
+						cube: cs[i].pts, net: ns[i].pts,
+						normal: quadNormal(cs[i].pts), kind: cs[i].kind,
+						face: f, cell: r*3 + c,
+					})
+				}
 			}
 		}
 	}
@@ -120,44 +163,50 @@ type gameState struct {
 	moves    []cube.Move
 	idx      int
 	frame    int
-	quads    []quad
+	polys    []poly
 	yaw      float32
 	pitch    float32
 	unfold   float32 // 0 = cube, 1 = flat net
 	unfoldTo float32
+	xray     bool
 	dragging bool
 	lastX    int
 	lastY    int
 }
 
 func (g *gameState) Update() error {
-	// Orbit with arrow keys.
-	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
-		g.yaw -= orbitSpeed
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
-		g.yaw += orbitSpeed
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
-		g.pitch -= orbitSpeed
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
-		g.pitch += orbitSpeed
-	}
-	// Orbit with mouse drag.
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		x, y := ebiten.CursorPosition()
-		if g.dragging {
-			g.yaw += float32(x-g.lastX) * 0.01
-			g.pitch += float32(y-g.lastY) * 0.01
+	// Orbit is only allowed while the cube is (mostly) folded up. Once it unfolds we
+	// lock the view and ease it to face the net head-on.
+	if g.unfold < 0.5 {
+		if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
+			g.yaw -= orbitSpeed
 		}
-		g.lastX, g.lastY, g.dragging = x, y, true
+		if ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
+			g.yaw += orbitSpeed
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
+			g.pitch -= orbitSpeed
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
+			g.pitch += orbitSpeed
+		}
+		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+			x, y := ebiten.CursorPosition()
+			if g.dragging {
+				g.yaw += float32(x-g.lastX) * 0.01
+				g.pitch += float32(y-g.lastY) * 0.01
+			}
+			g.lastX, g.lastY, g.dragging = x, y, true
+		} else {
+			g.dragging = false
+		}
+		g.pitch = clamp(g.pitch, -1.45, 1.45)
 	} else {
 		g.dragging = false
+		g.yaw += clamp(-g.yaw, -0.08, 0.08)
+		g.pitch += clamp(-g.pitch, -0.08, 0.08)
 	}
-	g.pitch = clamp(g.pitch, -1.45, 1.45)
 
-	// Toggle the unfold-to-net animation with space.
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		if g.unfoldTo == 0 {
 			g.unfoldTo = 1
@@ -167,7 +216,10 @@ func (g *gameState) Update() error {
 	}
 	g.unfold += clamp(g.unfoldTo-g.unfold, -unfoldSpeed, unfoldSpeed)
 
-	// Step the solve.
+	if inpututil.IsKeyJustPressed(ebiten.KeyX) {
+		g.xray = !g.xray
+	}
+
 	if g.idx < len(g.moves) {
 		g.frame++
 		if g.frame >= framesPerMove {
@@ -187,29 +239,38 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 	light := normalize(vec3{0.4, 0.7, 1})
 
 	type face2d struct {
-		pts   [4][2]float32
-		depth float32
-		col   color.RGBA
+		pts    [4][2]float32
+		depth  float32
+		col    color.RGBA
+		stroke bool
 	}
-	faces := make([]face2d, 0, len(g.quads))
-	for _, q := range g.quads {
+	faces := make([]face2d, 0, len(g.polys))
+	for _, p := range g.polys {
 		var pts [4][2]float32
 		var depth float32
 		for i := range 4 {
-			p := rotate(lerp(q.cube[i], q.net[i], g.unfold), sinY, cosY, sinX, cosX)
-			pts[i] = [2]float32{winW/2 + p.x*scale, winH/2 - p.y*scale}
-			depth += p.z
+			v := rotate(lerp(p.cube[i], p.net[i], g.unfold), sinY, cosY, sinX, cosX)
+			pts[i] = [2]float32{winW/2 + v.x*scale, winH/2 - v.y*scale}
+			depth += v.z
 		}
-		// Lighting from the (rotated) normal; when flat, light it head-on.
-		n := rotate(q.normal, sinY, cosY, sinX, cosX)
-		lit := 0.55 + 0.45*max(0, dot(n, light))
-		lit = lit + (1-lit)*g.unfold // wash out shading as it flattens
-		faces = append(faces, face2d{pts: pts, depth: depth / 4, col: shade(palette[f[int(q.face)*9+q.cell]], lit)})
+		n := rotate(p.normal, sinY, cosY, sinX, cosX)
+		lit := 0.5 + 0.5*max(0, dot(n, light))
+		base := plastic
+		if p.kind == kTop {
+			base = palette[f[int(p.face)*9+p.cell]]
+		}
+		col := shade(base, lit)
+		if g.xray {
+			col.A = 105
+		}
+		faces = append(faces, face2d{pts: pts, depth: depth / 4, col: col, stroke: p.kind == kTop})
 	}
 	sort.Slice(faces, func(i, j int) bool { return faces[i].depth < faces[j].depth })
 	for _, fc := range faces {
 		fillQuad(screen, fc.pts, fc.col)
-		strokeQuad(screen, fc.pts)
+		if fc.stroke && !g.xray {
+			strokeQuad(screen, fc.pts)
+		}
 	}
 
 	status := "solved"
@@ -219,7 +280,7 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 		status = fmt.Sprintf("done in %d moves", len(g.moves))
 	}
 	ebitenutil.DebugPrintAt(screen, status, 12, 12)
-	ebitenutil.DebugPrintAt(screen, "drag / arrows: orbit    space: unfold", 12, winH-22)
+	ebitenutil.DebugPrintAt(screen, "drag/arrows: orbit   space: unfold   x: x-ray", 12, winH-22)
 }
 
 func (g *gameState) Layout(int, int) (int, int) { return winW, winH }
@@ -230,6 +291,14 @@ func rotate(p vec3, sinY, cosY, sinX, cosX float32) vec3 {
 	y := p.y*cosX - z*sinX
 	z = p.y*sinX + z*cosX
 	return vec3{x, y, z}
+}
+
+func quadNormal(p [4]vec3) vec3 {
+	return normalize(cross(p[1].sub(p[0]), p[3].sub(p[0])))
+}
+
+func cross(a, b vec3) vec3 {
+	return vec3{a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x}
 }
 
 func fillQuad(screen *ebiten.Image, q [4][2]float32, col color.RGBA) {
@@ -243,7 +312,7 @@ func fillQuad(screen *ebiten.Image, q [4][2]float32, col color.RGBA) {
 	r, gg, b, a := float32(col.R)/255, float32(col.G)/255, float32(col.B)/255, float32(col.A)/255
 	for i := range vs {
 		vs[i].SrcX, vs[i].SrcY = 1, 1
-		vs[i].ColorR, vs[i].ColorG, vs[i].ColorB, vs[i].ColorA = r, gg, b, a
+		vs[i].ColorR, vs[i].ColorG, vs[i].ColorB, vs[i].ColorA = r*a, gg*a, b*a, a
 	}
 	screen.DrawTriangles(vs, is, whiteSub, &ebiten.DrawTrianglesOptions{AntiAlias: true})
 }
@@ -251,7 +320,7 @@ func fillQuad(screen *ebiten.Image, q [4][2]float32, col color.RGBA) {
 func strokeQuad(screen *ebiten.Image, q [4][2]float32) {
 	for i := range 4 {
 		j := (i + 1) % 4
-		vector.StrokeLine(screen, q[i][0], q[i][1], q[j][0], q[j][1], 1.5, outline, true)
+		vector.StrokeLine(screen, q[i][0], q[i][1], q[j][0], q[j][1], 1.2, outline, true)
 	}
 }
 
@@ -276,7 +345,7 @@ func fsincos(a float32) (float32, float32) {
 
 // Play opens the visualizer on the start cube and animates the moves.
 func Play(start cube.Cube, moves []cube.Move) error {
-	g := &gameState{c: start, moves: moves, quads: stickers(), yaw: 0.6, pitch: 0.5}
+	g := &gameState{c: start, moves: moves, polys: buildPolys(), yaw: 0.6, pitch: 0.5}
 	ebiten.SetWindowSize(winW, winH)
 	ebiten.SetWindowTitle("rubix")
 	return ebiten.RunGame(g)
