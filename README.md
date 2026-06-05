@@ -23,17 +23,31 @@ are the other subcommands.
 
 ## Watch it solve
 
-The 3D visualizer is behind the `ebiten` build tag:
+The 3D visualizer is behind the `ebiten` build tag. It scrambles and solves on its
+own — just run:
 
 ```sh
-go run -tags ebiten ./cmd/rubix view \
-  --input "$(go run ./cmd/rubix scramble -n 25 -seed 1 | awk '/facelets/{print $2}')" \
-  --strategy multi
+go run -tags ebiten ./cmd/rubix view
 ```
 
-Controls: **drag / arrows** orbit · **space** unfold to a flat net · **x** x-ray ·
-**r** new scramble. Needs a desktop with OpenGL/X11 (on Debian/Ubuntu:
-`sudo apt install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev`).
+| input | action |
+|-------|--------|
+| drag / arrow keys | orbit |
+| shift + ↑/↓, or scroll wheel | zoom |
+| `space` | unfold to a flat net |
+| `x` | x-ray (see all sides) |
+| `r` | new scramble |
+| `s` | switch solver |
+
+<details>
+<summary>Linux: OpenGL/X11 libraries</summary>
+
+The window needs OpenGL/X11. On Debian/Ubuntu:
+
+```sh
+sudo apt install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev
+```
+</details>
 
 ## The solvers
 
