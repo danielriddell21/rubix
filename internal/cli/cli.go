@@ -159,16 +159,18 @@ func guiController(initial *cube.Cube, start int) gui.Controller {
 		Start:      start,
 		Initial:    initial,
 		Scramble:   func() cube.Cube { return cube.ScrambledCube(25, rand.Int64()) },
-		Solve: func(name string, c cube.Cube) []cube.Move {
+		Solve: func(name string, c cube.Cube) ([]cube.Move, bool) {
 			s, err := solver.Get(name)
 			if err != nil {
-				return nil
+				return nil, false
 			}
 			res, err := s.Solve(c)
-			if err != nil || !res.Solved {
-				return nil
+			if err != nil {
+				return nil, false
 			}
-			return res.Moves
+			// Return the attempt even when it doesn't solve, so the viewer plays it
+			// and shows it getting stuck.
+			return res.Moves, res.Solved
 		},
 	}
 }

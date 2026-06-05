@@ -165,8 +165,9 @@ func buildPolys() []poly {
 }
 
 type solveOut struct {
-	gen   int
-	moves []cube.Move
+	gen    int
+	moves  []cube.Move
+	solved bool
 }
 
 type gameState struct {
@@ -177,10 +178,11 @@ type gameState struct {
 	gen      int
 	solveCh  chan solveOut
 
-	c     cube.Cube
-	moves []cube.Move
-	idx   int
-	frame int // net-mode move pacing
+	c          cube.Cube
+	moves      []cube.Move
+	idx        int
+	frame      int // net-mode move pacing
+	lastSolved bool
 
 	turning   bool
 	turnFrame int
@@ -208,7 +210,10 @@ func (g *gameState) kickSolve() {
 	g.solving = true
 	g.gen++
 	gen, strat, start, ch, solve := g.gen, g.ctrl.Strategies[g.stratIdx], g.start, g.solveCh, g.ctrl.Solve
-	go func() { ch <- solveOut{gen, solve(strat, start)} }()
+	go func() {
+		mv, ok := solve(strat, start)
+		ch <- solveOut{gen, mv, ok}
+	}()
 }
 
 func (g *gameState) newScramble() {
@@ -221,7 +226,7 @@ func (g *gameState) Update() error {
 	select {
 	case out := <-g.solveCh:
 		if out.gen == g.gen {
-			g.moves, g.solving = out.moves, false
+			g.moves, g.solving, g.lastSolved = out.moves, false, out.solved
 		}
 	default:
 	}
@@ -398,11 +403,16 @@ func (g *gameState) status() string {
 	case g.solving:
 		return "solving... (" + strat + ")"
 	case len(g.moves) == 0:
-		return "[" + strat + "] gave up"
+		if g.lastSolved {
+			return "[" + strat + "] already solved"
+		}
+		return "[" + strat + "] no solution found"
 	case g.idx < len(g.moves):
 		return fmt.Sprintf("[%s] move %d/%d  %s", strat, g.idx+1, len(g.moves), g.moves[g.idx])
-	default:
+	case g.lastSolved:
 		return fmt.Sprintf("[%s] solved in %d moves", strat, len(g.moves))
+	default:
+		return fmt.Sprintf("[%s] stuck after %d moves", strat, len(g.moves))
 	}
 }
 
