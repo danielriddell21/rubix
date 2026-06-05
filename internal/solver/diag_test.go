@@ -3,6 +3,7 @@ package solver
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,7 +16,10 @@ func TestDiagTiming(t *testing.T) {
 	if os.Getenv("DIAG") == "" {
 		t.Skip("set DIAG=1")
 	}
-	const n = 20
+	n := 20
+	if v := os.Getenv("RATE_N"); v != "" {
+		n, _ = strconv.Atoi(v)
+	}
 	for _, s := range All() {
 		var solved, moves int
 		start := time.Now()
