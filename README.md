@@ -37,6 +37,27 @@ go run ./cmd/rubix solve --input <54-chars> --strategy prune --execute
 `gen-tables` precomputes the prune tables (cached under `$RUBIX_TABLES` or the user
 cache dir).
 
+## Watch it solve (visualizer)
+
+The animated cube view is gated behind the `ebiten` build tag, so add `-tags ebiten`
+to the `go run` command. It opens a window and plays the solution move by move:
+
+```sh
+# scramble a cube and watch it get solved in real time
+go run -tags ebiten ./cmd/rubix view \
+  --input "$(go run ./cmd/rubix scramble -n 25 -seed 1 | awk '/facelets/{print $2}')" \
+  --strategy multi
+
+# or attach the viewer to any solve
+go run -tags ebiten ./cmd/rubix solve --input <54-chars> --strategy multi --view
+```
+
+Needs a desktop with OpenGL/X11 (it opens a real window, so not over plain SSH or in
+a container). On Debian/Ubuntu install the dev libraries once:
+`sudo apt install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev`.
+The first run pauses a few seconds to build the prune tables, then the window opens
+and the status line counts the moves as the cube solves.
+
 ## The solvers
 
 The cube is modelled at the cubie level (piece permutation + orientation), with edge
