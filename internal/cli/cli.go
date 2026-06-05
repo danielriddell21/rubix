@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"strings"
 
@@ -145,9 +146,22 @@ func cmdSolve(args []string) error {
 		}
 	}
 	if *view {
-		return gui.Play(c, res.Moves)
+		return gui.Play(c, res.Moves, scrambleResolver(s))
 	}
 	return nil
+}
+
+// scrambleResolver returns a closure that produces a fresh random scramble and its
+// solution, used by the visualizer's in-app re-scramble ("r" key).
+func scrambleResolver(s solver.Solver) func() (cube.Cube, []cube.Move) {
+	return func() (cube.Cube, []cube.Move) {
+		c := cube.ScrambledCube(25, rand.Int64())
+		res, err := s.Solve(c)
+		if err != nil || !res.Solved {
+			return c, nil
+		}
+		return c, res.Moves
+	}
 }
 
 func cmdSolvers([]string) error {
@@ -234,17 +248,17 @@ func cmdView(args []string) error {
 	if err != nil {
 		return err
 	}
+	s, err := solver.Get(*strategy)
+	if err != nil {
+		return err
+	}
 	var moves []cube.Move
 	if *solve {
-		s, err := solver.Get(*strategy)
-		if err != nil {
-			return err
-		}
 		res, err := s.Solve(c)
 		if err != nil {
 			return err
 		}
 		moves = res.Moves
 	}
-	return gui.Play(c, moves)
+	return gui.Play(c, moves, scrambleResolver(s))
 }

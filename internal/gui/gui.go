@@ -172,6 +172,8 @@ type gameState struct {
 	dragging bool
 	lastX    int
 	lastY    int
+	// resolve returns a fresh scramble and its solution, for the in-app re-scramble.
+	resolve func() (cube.Cube, []cube.Move)
 }
 
 func (g *gameState) Update() error {
@@ -218,6 +220,12 @@ func (g *gameState) Update() error {
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyX) {
 		g.xray = !g.xray
+	}
+
+	// Re-scramble in place.
+	if inpututil.IsKeyJustPressed(ebiten.KeyR) && g.resolve != nil {
+		g.c, g.moves = g.resolve()
+		g.idx, g.frame = 0, 0
 	}
 
 	if g.idx < len(g.moves) {
@@ -280,7 +288,7 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 		status = fmt.Sprintf("done in %d moves", len(g.moves))
 	}
 	ebitenutil.DebugPrintAt(screen, status, 12, 12)
-	ebitenutil.DebugPrintAt(screen, "drag/arrows: orbit   space: unfold   x: x-ray", 12, winH-22)
+	ebitenutil.DebugPrintAt(screen, "drag/arrows: orbit   space: unfold   x: x-ray   r: scramble", 12, winH-22)
 }
 
 func (g *gameState) Layout(int, int) (int, int) { return winW, winH }
@@ -343,9 +351,10 @@ func fsincos(a float32) (float32, float32) {
 	return float32(s), float32(c)
 }
 
-// Play opens the visualizer on the start cube and animates the moves.
-func Play(start cube.Cube, moves []cube.Move) error {
-	g := &gameState{c: start, moves: moves, polys: buildPolys(), yaw: 0.6, pitch: 0.5}
+// Play opens the visualizer on the start cube and animates the moves. resolve, if
+// non-nil, supplies a fresh scramble and solution when the user presses "r".
+func Play(start cube.Cube, moves []cube.Move, resolve func() (cube.Cube, []cube.Move)) error {
+	g := &gameState{c: start, moves: moves, polys: buildPolys(), yaw: 0.6, pitch: 0.5, resolve: resolve}
 	ebiten.SetWindowSize(winW, winH)
 	ebiten.SetWindowTitle("rubix")
 	return ebiten.RunGame(g)

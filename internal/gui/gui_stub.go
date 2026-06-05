@@ -15,6 +15,6 @@ func Available() bool { return false }
 
 // Play would animate the solution from the given start cube. In the stub build it
 // returns an error directing the user to rebuild with the ebiten tag.
-func Play(start cube.Cube, moves []cube.Move) error {
+func Play(start cube.Cube, moves []cube.Move, resolve func() (cube.Cube, []cube.Move)) error {
 	return errors.New("visualizer not built into this binary; rebuild with: go build -tags ebiten")
 }
