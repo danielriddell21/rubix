@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,11 +21,24 @@ func TestDiagTiming(t *testing.T) {
 	if v := os.Getenv("RATE_N"); v != "" {
 		n, _ = strconv.Atoi(v)
 	}
-	// Iterate fast→slow (registry order reversed) so results stream quickly and the
-	// slow greedy/sandwich solvers report last.
-	all := All()
-	for i := len(all) - 1; i >= 0; i-- {
-		s := all[i]
+	// By default iterate fast→slow (registry order reversed) so results stream
+	// quickly; RATE_SOLVERS=a,b,c restricts/orders the set measured.
+	var list []Solver
+	if names := os.Getenv("RATE_SOLVERS"); names != "" {
+		for _, name := range strings.Split(names, ",") {
+			s, err := Get(strings.TrimSpace(name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			list = append(list, s)
+		}
+	} else {
+		all := All()
+		for i := len(all) - 1; i >= 0; i-- {
+			list = append(list, all[i])
+		}
+	}
+	for _, s := range list {
 		var solved, moves int
 		start := time.Now()
 		for seed := int64(0); seed < int64(n); seed++ {
