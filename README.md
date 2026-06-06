@@ -51,19 +51,20 @@ sudo apt install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev li
 
 ## The solvers
 
-The nine solvers retrace the two videos' progression (rates are approximate):
+The nine solvers retrace the two videos' progression. Rates are measured over random
+scrambles:
 
 | # | strategy | idea | solve rate |
 |---|----------|------|------------|
-| 1 | `greedy`   | hill-climb on solved-cubie count | ~10% (often stuck) |
-| 2 | `sandwich` | greedy + backward-search dictionary | ~70% |
-| 3 | `oriented` | orient all edges, then solve with F/B turns removed | ~99% |
-| 4 | `cfop`     | Cross → F2L → OLL → PLL, staged | 100%, ~56 moves |
-| 5 | `domino`   | reduce to the domino group, then solve it | ~95%, ~26 moves |
-| 6 | `iddfs`    | domino search via iterative deepening | ~95% |
-| 7 | `idastar`  | + a cheap admissible lower bound | ~98% |
+| 1 | `greedy`   | greedy best-first by solved-cubie count | ~10% (often stuck) |
+| 2 | `sandwich` | greedy + backward-search dictionary | ~45% |
+| 3 | `oriented` | orient all edges, then solve with F/B turns removed | ~33% |
+| 4 | `cfop`     | Cross → F2L → OLL → PLL, staged | 100%, ~57 moves |
+| 5 | `domino`   | reduce to the domino state, then solve it | 100%, ~30 moves |
+| 6 | `iddfs`    | domino search via iterative deepening | 100%, ~23 moves |
+| 7 | `idastar`  | + a lower-bound prune | 100%, ~23 moves |
 | 8 | `prune`    | + exact prune tables (big speedup) | 100%, ~23 moves |
-| 9 | `multi`    | try many reductions, keep the shortest | 100%, ~20 moves |
+| 9 | `multi`    | try many reductions, keep the shortest | 100%, ~21 moves |
 
 ## Architecture
 
