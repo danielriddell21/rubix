@@ -99,3 +99,5 @@ default build is pure-Go:
   https://www.cs.princeton.edu/courses/archive/fall06/cos402/papers/korfrubik.pdf
 - ev3dev: https://www.ev3dev.org/ · ev3go/ev3dev: https://github.com/ev3go/ev3dev
 - MindCub3r: https://www.mindcuber.com/ · Ebiten: https://ebitengine.org/
+
+Where this project deviates from the videos: [docs/limitations.md](docs/limitations.md).
