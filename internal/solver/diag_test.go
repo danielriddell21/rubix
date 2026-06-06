@@ -20,7 +20,11 @@ func TestDiagTiming(t *testing.T) {
 	if v := os.Getenv("RATE_N"); v != "" {
 		n, _ = strconv.Atoi(v)
 	}
-	for _, s := range All() {
+	// Iterate fast→slow (registry order reversed) so results stream quickly and the
+	// slow greedy/sandwich solvers report last.
+	all := All()
+	for i := len(all) - 1; i >= 0; i-- {
+		s := all[i]
 		var solved, moves int
 		start := time.Now()
 		for seed := int64(0); seed < int64(n); seed++ {
