@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // ev3_scan.go reads the physical cube with the colour sensor. The sensor is mounted

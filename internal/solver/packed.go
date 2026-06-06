@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // packed.go is the "Binary State" from video 1: the cube packed into two 64-bit
 // integers so the greedy search can apply moves and score positions with register-only

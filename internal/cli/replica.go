@@ -12,9 +12,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/danielriddell21/rubix/internal/cube"
 	"github.com/danielriddell21/rubix/internal/gui"
 	"github.com/danielriddell21/rubix/internal/solver"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // replicaJob is one cube to solve: a scramble (shared across strategies for a given

@@ -3,8 +3,8 @@ package solver
 import (
 	"sync"
 
-	"github.com/danielriddell21/rubix/internal/cube"
 	"github.com/danielriddell21/rubix/internal/solver/search"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // Shared pruning tables, built once on first use and cached to disk.

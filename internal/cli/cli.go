@@ -10,10 +10,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/danielriddell21/rubix/internal/cube"
 	"github.com/danielriddell21/rubix/internal/gui"
 	"github.com/danielriddell21/rubix/internal/robot"
 	"github.com/danielriddell21/rubix/internal/solver"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // Run dispatches a subcommand. It returns a process exit code.

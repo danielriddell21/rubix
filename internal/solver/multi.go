@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // multiSolver is the final solver from video 2: the prune-table two-phase engine run
 // in multi-search mode, which enumerates many phase-1 reductions of increasing length

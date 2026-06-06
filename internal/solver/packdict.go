@@ -3,7 +3,7 @@ package solver
 import (
 	"sync"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // packdict.go is the backward "meet in the middle" lookup from video 1, on the packed

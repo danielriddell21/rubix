@@ -22,6 +22,7 @@ const (
 // scheme (U=white, R=red, F=green, D=yellow, L=orange, B=blue).
 var faceLetters = [6]byte{'U', 'R', 'F', 'D', 'L', 'B'}
 
+// String returns the face letter (U, R, F, D, L or B) for the colour.
 func (c Color) String() string { return string(faceLetters[c]) }
 
 // Facelets is the 54-sticker view of a cube, ordered U0..8, R9..17, F18..26,

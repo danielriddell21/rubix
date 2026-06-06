@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // stepLimit bounds how many moves a greedy descent will play before declaring failure.
 const stepLimit = 300

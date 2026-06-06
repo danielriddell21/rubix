@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // sandwichSolver is the greedy solver plus a backward "meet in the middle" dictionary:
 // a breadth-first search outward from solved records every nearby position's distance

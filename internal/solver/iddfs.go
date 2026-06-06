@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // iddfsSolver is the domino solver with the fixed-depth search replaced by iterative
 // deepening: it deepens the two-phase search until the goal (the domino state, then the

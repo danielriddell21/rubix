@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // descend_fast.go is the greedy best-first search from video 1, running on the packed

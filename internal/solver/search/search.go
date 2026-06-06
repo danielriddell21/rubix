@@ -6,7 +6,7 @@ package search
 import (
 	"container/heap"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // Goal reports whether a cube state satisfies the search target.

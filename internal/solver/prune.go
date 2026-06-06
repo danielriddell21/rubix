@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // pruneSolver replaces the search's estimate with exact prune tables (edge orientation,
 // corner orientation, middle-slice and their combinations), giving the domino solver an

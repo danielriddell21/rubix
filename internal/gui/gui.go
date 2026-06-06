@@ -19,7 +19,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 const (

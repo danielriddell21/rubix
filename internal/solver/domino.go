@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // dominoSolver reduces the cube to the "domino" state — all edges and corners oriented
 // and the four middle edges in the middle layer — and then solves it using only up/down

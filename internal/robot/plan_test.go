@@ -3,7 +3,7 @@ package robot
 import (
 	"testing"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // recover replays robot primitives and reconstructs the outer-face turns they

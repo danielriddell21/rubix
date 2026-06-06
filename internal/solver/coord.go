@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // This file defines the coordinate projections of a cube used both as pruning-table
 // indices and as the goal tests for the two-phase (domino) solver. Each coordinate

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // Result is the outcome of a solve.

@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // idaStarSolver adds a lower-bound prune to the iterative-deepening domino search
 // (count the incorrect edges — each move fixes at most four — and cut a branch that

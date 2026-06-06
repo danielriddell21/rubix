@@ -1,6 +1,6 @@
 package gui
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // Controller is how the CLI drives the visualizer without coupling the gui package to
 // the solver: it supplies a strategy list, a way to make a fresh scramble, and a way

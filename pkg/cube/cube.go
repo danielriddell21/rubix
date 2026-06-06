@@ -2,8 +2,14 @@
 // representation (piece permutation + orientation), move application, Singmaster
 // notation, facelet conversion for I/O, validation and scrambling.
 //
-// This is the single shared state model used by the headless solver, the Ebiten
-// visualizer and the LEGO EV3 robot.
+// The central type is [Cube], a small comparable value type. Build one with
+// [Solved], [FromFacelets] or [ScrambledCube]; turn it with [Cube.Apply] and
+// [Cube.Applied] over [Move] values (parse and print them with [ParseMoves] and
+// [FormatMoves]); and read it back as [Facelets] via [Cube.ToFacelets].
+//
+// It is the shared state model behind the headless solver, the Ebiten visualizer
+// and the LEGO EV3 robot, and is reusable on its own by any program that needs to
+// model and turn a cube.
 package cube
 
 // Corner slots, in the standard Kociemba order.

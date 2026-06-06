@@ -1,8 +1,8 @@
 package solver
 
 import (
-	"github.com/danielriddell21/rubix/internal/cube"
 	"github.com/danielriddell21/rubix/internal/solver/search"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // twophase.go is the domino two-phase engine shared by the iddfs, idastar, prune and

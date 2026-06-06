@@ -5,7 +5,7 @@
 // driver (//go:build ev3) talks to real motors and the colour sensor.
 package robot
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // Robot is a physical cube manipulator.
 type Robot interface {

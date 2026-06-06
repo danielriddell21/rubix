@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/danielriddell21/rubix/internal/cube"
 	"github.com/danielriddell21/rubix/internal/solver/search"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // cfopSolver implements the CFOP method (video 2: Cross → F2L → OLL → PLL) on the D

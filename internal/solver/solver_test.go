@@ -3,7 +3,7 @@ package solver
 import (
 	"testing"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // completeSolvers always solve any cube (100% in the videos).

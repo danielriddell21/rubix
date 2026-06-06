@@ -1,6 +1,6 @@
 package solver
 
-import "github.com/danielriddell21/rubix/internal/cube"
+import "github.com/danielriddell21/rubix/pkg/cube"
 
 // orientedSolver first orients all twelve edges (only front/back quarter turns can flip
 // an edge, so once they are all oriented those turns are no longer needed). It then

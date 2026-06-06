@@ -8,7 +8,7 @@ import (
 
 	"github.com/ev3go/ev3dev"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // ev3.go drives a real MindCub3r-style robot through the ev3dev sysfs interface: a

@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/danielriddell21/rubix/internal/cube"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // Mock is the default, hardware-free driver. It prints the moves and the robot

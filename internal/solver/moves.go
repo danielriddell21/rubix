@@ -1,8 +1,8 @@
 package solver
 
 import (
-	"github.com/danielriddell21/rubix/internal/cube"
 	"github.com/danielriddell21/rubix/internal/solver/search"
+	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
 // allMoves is the full 18-move set.
