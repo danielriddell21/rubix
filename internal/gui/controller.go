@@ -15,4 +15,16 @@ type Controller struct {
 	// cube. The moves are returned even when solved is false, so the viewer can play
 	// the attempt and show it getting stuck (faithful to the videos).
 	Solve func(strategy string, c cube.Cube) (moves []cube.Move, solved bool)
+
+	// Cells, when non-empty, drives a grid of independent cubes (replica mode) instead
+	// of the single self-driving cube. Each cell carries its own scramble and strategy.
+	Cells []Cell
+}
+
+// Cell is one cube in a replica grid: a starting scramble, the strategy that solves it,
+// and a short label shown on the cell.
+type Cell struct {
+	Strategy string
+	Initial  cube.Cube
+	Label    string
 }

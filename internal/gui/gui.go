@@ -3,7 +3,8 @@
 // Package gui is an Ebiten visualizer of the live cube state. It renders the cube as a
 // real 3D object with raised plastic tiles, animates each turn, and is self-driving:
 // it scrambles and solves on its own, lets you orbit/zoom, x-ray, unfold to a flat net,
-// re-scramble ("r") and switch solver ("s"). Built only with the `ebiten` tag.
+// re-scramble ("r"), switch solver ("s") and toggle the move list ("m"). In replica mode
+// it shows a grid of independent cubes ("tab" focuses one). Built only with `ebiten`.
 package gui
 
 import (
@@ -32,6 +33,10 @@ const (
 	unfoldSpeed = 0.04
 	tileInset   = 0.12 // gap around each tile (plastic shows through)
 	tileRaise   = 0.16 // how far each coloured tile stands proud of the body
+
+	cellSize = 320  // target pixels per grid cell
+	maxWin   = 1280 // largest window edge in replica grid mode
+	maxCells = 16   // cap on cubes drawn in the grid (the CLI table handles more)
 )
 
 var palette = [6]color.RGBA{
@@ -47,6 +52,9 @@ var (
 	plastic    = color.RGBA{34, 34, 40, 255}
 	outline    = color.RGBA{12, 12, 14, 255}
 	background = color.RGBA{30, 30, 36, 255}
+	focusLine  = color.RGBA{200, 200, 80, 255}
+	cellLine   = color.RGBA{70, 70, 80, 255}
+	highlight  = color.RGBA{70, 70, 30, 255}
 )
 
 // whiteSub is a 1px white source used to fill vector triangles with a flat colour.
@@ -170,10 +178,13 @@ type solveOut struct {
 	solved bool
 }
 
-type gameState struct {
+// cubeView is one animated cube: its scramble, the solution being played and the
+// per-move animation state. The camera and geometry are shared and live on gameState.
+type cubeView struct {
 	ctrl     Controller
 	start    cube.Cube // the current scramble (re-solved when the strategy changes)
 	stratIdx int
+	label    string
 	solving  bool
 	gen      int
 	solveCh  chan solveOut
@@ -187,6 +198,153 @@ type gameState struct {
 	turning   bool
 	turnFrame int
 	turnMove  cube.Move
+}
+
+// kickSolve restarts the animation from the current scramble and solves it (with the
+// current strategy) on a background goroutine so the window never blocks.
+func (v *cubeView) kickSolve() {
+	v.c = v.start
+	v.idx, v.frame, v.turnFrame = 0, 0, 0
+	v.turning = false
+	v.moves = nil
+	v.solving = true
+	v.gen++
+	gen, strat, start, ch, solve := v.gen, v.ctrl.Strategies[v.stratIdx], v.start, v.solveCh, v.ctrl.Solve
+	go func() {
+		mv, ok := solve(strat, start)
+		ch <- solveOut{gen, mv, ok}
+	}()
+}
+
+func (v *cubeView) rescramble(scramble func() cube.Cube) {
+	v.start = scramble()
+	v.kickSolve()
+}
+
+// drainSolve picks up a finished solve, ignoring stale results from a superseded kick.
+func (v *cubeView) drainSolve() {
+	select {
+	case out := <-v.solveCh:
+		if out.gen == v.gen {
+			v.moves, v.solving, v.lastSolved = out.moves, false, out.solved
+		}
+	default:
+	}
+}
+
+// advanceSolve plays the solution: animated turns while folded, instant snaps while flat.
+func (v *cubeView) advanceSolve(unfold float32) {
+	if unfold >= 0.5 {
+		v.turning = false
+		if v.idx < len(v.moves) {
+			if v.frame++; v.frame >= netFrames {
+				v.frame = 0
+				v.c.Apply(v.moves[v.idx])
+				v.idx++
+			}
+		}
+		return
+	}
+	if v.turning {
+		if v.turnFrame++; v.turnFrame >= turnFrames {
+			v.turning = false
+			v.c.Apply(v.turnMove)
+			v.idx++
+		}
+		return
+	}
+	if v.idx < len(v.moves) {
+		v.turning, v.turnFrame, v.turnMove = true, 0, v.moves[v.idx]
+	}
+}
+
+func (v *cubeView) strat() string {
+	if len(v.ctrl.Strategies) > 0 {
+		return v.ctrl.Strategies[v.stratIdx]
+	}
+	return ""
+}
+
+func (v *cubeView) status() string {
+	strat := v.strat()
+	switch {
+	case v.solving:
+		return "solving... (" + strat + ")"
+	case len(v.moves) == 0:
+		if v.lastSolved {
+			return "[" + strat + "] already solved"
+		}
+		return "[" + strat + "] no solution found"
+	case v.idx < len(v.moves):
+		return fmt.Sprintf("[%s] move %d/%d  %s", strat, v.idx+1, len(v.moves), v.moves[v.idx])
+	case v.lastSolved:
+		return fmt.Sprintf("[%s] solved in %d moves", strat, len(v.moves))
+	default:
+		return fmt.Sprintf("[%s] stuck after %d moves", strat, len(v.moves))
+	}
+}
+
+// shortStatus is the compact per-cell readout for the grid.
+func (v *cubeView) shortStatus() string {
+	switch {
+	case v.solving:
+		return "solving"
+	case len(v.moves) == 0:
+		if v.lastSolved {
+			return "solved"
+		}
+		return "no sol"
+	case v.idx < len(v.moves):
+		return fmt.Sprintf("%d/%d", v.idx, len(v.moves))
+	case v.lastSolved:
+		return fmt.Sprintf("done %d", len(v.moves))
+	default:
+		return fmt.Sprintf("stuck %d", len(v.moves))
+	}
+}
+
+// turnAngle returns the axis (0=x,1=y,2=z) and current signed angle of the active turn.
+// Clockwise (viewed from outside the face) is a negative rotation about the outward axis.
+func (v *cubeView) turnAngle() (int, float32) {
+	if !v.turning {
+		return 1, 0
+	}
+	var target float32
+	switch v.turnMove % 3 {
+	case 0:
+		target = -math.Pi / 2 // CW quarter
+	case 1:
+		target = math.Pi // half turn
+	default:
+		target = math.Pi / 2 // CCW quarter
+	}
+	axis, sign := faceAxis(v.turnMove.Face())
+	t := easeInOut(float32(v.turnFrame) / turnFrames)
+	return axis, float32(sign) * target * t
+}
+
+func (v *cubeView) inTurnLayer(p poly) bool {
+	switch v.turnMove.Face() {
+	case 0:
+		return p.center.y > 0.5
+	case 3:
+		return p.center.y < -0.5
+	case 1:
+		return p.center.x > 0.5
+	case 4:
+		return p.center.x < -0.5
+	case 2:
+		return p.center.z > 0.5
+	default:
+		return p.center.z < -0.5
+	}
+}
+
+// gameState owns the shared camera, geometry and the set of cube views.
+type gameState struct {
+	views      []*cubeView
+	cols, rows int
+	w, h       int
 
 	polys []poly
 
@@ -198,37 +356,16 @@ type gameState struct {
 	dragging   bool
 	lastX      int
 	lastY      int
+
+	focus     int
+	showMoves bool
 }
 
-// kickSolve restarts the animation from the current scramble and solves it (with the
-// current strategy) on a background goroutine so the window never blocks.
-func (g *gameState) kickSolve() {
-	g.c = g.start
-	g.idx, g.frame, g.turnFrame = 0, 0, 0
-	g.turning = false
-	g.moves = nil
-	g.solving = true
-	g.gen++
-	gen, strat, start, ch, solve := g.gen, g.ctrl.Strategies[g.stratIdx], g.start, g.solveCh, g.ctrl.Solve
-	go func() {
-		mv, ok := solve(strat, start)
-		ch <- solveOut{gen, mv, ok}
-	}()
-}
-
-func (g *gameState) newScramble() {
-	g.start = g.ctrl.Scramble()
-	g.kickSolve()
-}
+func (g *gameState) grid() bool { return len(g.views) > 1 }
 
 func (g *gameState) Update() error {
-	// Collect a finished solve (ignoring stale ones from a superseded request).
-	select {
-	case out := <-g.solveCh:
-		if out.gen == g.gen {
-			g.moves, g.solving, g.lastSolved = out.moves, false, out.solved
-		}
-	default:
+	for _, v := range g.views {
+		v.drainSolve()
 	}
 
 	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight)
@@ -293,54 +430,80 @@ func (g *gameState) Update() error {
 		g.xray = !g.xray
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
-		g.newScramble()
+		for _, v := range g.views {
+			v.rescramble(v.ctrl.Scramble)
+		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyS) && len(g.ctrl.Strategies) > 0 {
-		g.stratIdx = (g.stratIdx + 1) % len(g.ctrl.Strategies)
-		g.kickSolve()
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		v := g.views[g.focus]
+		if len(v.ctrl.Strategies) > 0 {
+			v.stratIdx = (v.stratIdx + 1) % len(v.ctrl.Strategies)
+			v.label = fmt.Sprintf("#%d %s", g.focus, v.strat())
+			v.kickSolve()
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyTab) && g.grid() {
+		g.focus = (g.focus + 1) % len(g.views)
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+		g.showMoves = !g.showMoves
 	}
 
-	g.advanceSolve()
+	for _, v := range g.views {
+		v.advanceSolve(g.unfold)
+	}
 	return nil
-}
-
-// advanceSolve plays the solution: animated turns while folded, instant snaps while flat.
-func (g *gameState) advanceSolve() {
-	if g.unfold >= 0.5 {
-		g.turning = false
-		if g.idx < len(g.moves) {
-			if g.frame++; g.frame >= netFrames {
-				g.frame = 0
-				g.c.Apply(g.moves[g.idx])
-				g.idx++
-			}
-		}
-		return
-	}
-	if g.turning {
-		if g.turnFrame++; g.turnFrame >= turnFrames {
-			g.turning = false
-			g.c.Apply(g.turnMove)
-			g.idx++
-		}
-		return
-	}
-	if g.idx < len(g.moves) {
-		g.turning, g.turnFrame, g.turnMove = true, 0, g.moves[g.idx]
-	}
 }
 
 func (g *gameState) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
-	f := g.c.ToFacelets()
+	cw := float32(g.w) / float32(g.cols)
+	ch := float32(g.h) / float32(g.rows)
+	px := scale * g.zoom
+	if g.grid() {
+		px = scale * g.zoom * min(cw, ch) / winW
+	}
+
+	for k, v := range g.views {
+		col, row := k%g.cols, k/g.cols
+		ox, oy := float32(col)*cw, float32(row)*ch
+		g.drawView(screen, v, ox+cw/2, oy+ch/2, px)
+		if g.grid() {
+			line := cellLine
+			if k == g.focus {
+				line = focusLine
+			}
+			vector.StrokeRect(screen, ox, oy, cw, ch, 1, line, false)
+			ebitenutil.DebugPrintAt(screen, v.label+"  "+v.shortStatus(), int(ox)+6, int(oy)+6)
+		}
+	}
+
+	fv := g.views[g.focus]
+	if !g.grid() {
+		ebitenutil.DebugPrintAt(screen, fv.status(), 12, 12)
+	}
+	help := "drag/arrows: orbit   wheel: zoom   space: unfold   x: x-ray   r: scramble   s: solver   m: moves"
+	if g.grid() {
+		help += "   tab: focus"
+	}
+	ebitenutil.DebugPrintAt(screen, help, 12, g.h-22)
+
+	if g.showMoves {
+		g.drawMoveList(screen, fv)
+	}
+}
+
+// drawView projects one cube into a cell centred at (cx,cy) with px pixels per world
+// unit. Camera angles, unfold, x-ray and geometry are shared from gameState.
+func (g *gameState) drawView(screen *ebiten.Image, v *cubeView, cx, cy, px float32) {
+	f := v.c.ToFacelets()
 	sinY, cosY := fsincos(g.yaw)
 	sinX, cosX := fsincos(g.pitch)
 	key := normalize(vec3{0.5, 0.8, 0.9})
 	fill := normalize(vec3{-0.5, 0.3, 0.4})
-	px := scale * g.zoom
 
 	// Current animated turn angle, applied to the moving layer.
-	turnAxis, turnAng := g.turnAngle()
+	turnAxis, turnAng := v.turnAngle()
 	tsin, tcos := fsincos(turnAng)
 
 	type face2d struct {
@@ -354,17 +517,17 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 		if g.xray && p.kind != kTop {
 			continue // x-ray: drop the plastic body so every side shows through
 		}
-		spin := g.turning && g.inTurnLayer(p)
+		spin := v.turning && v.inTurnLayer(p)
 		var pts [4][2]float32
 		var depth float32
 		for i := range 4 {
-			v := lerp(p.cube[i], p.net[i], g.unfold)
+			pv := lerp(p.cube[i], p.net[i], g.unfold)
 			if spin {
-				v = rotateAxis(v, turnAxis, tsin, tcos)
+				pv = rotateAxis(pv, turnAxis, tsin, tcos)
 			}
-			v = rotate(v, sinY, cosY, sinX, cosX)
-			pts[i] = [2]float32{winW/2 + v.x*px, winH/2 - v.y*px}
-			depth += v.z
+			pv = rotate(pv, sinY, cosY, sinX, cosX)
+			pts[i] = [2]float32{cx + pv.x*px, cy - pv.y*px}
+			depth += pv.z
 		}
 		n := p.normal
 		if spin {
@@ -389,71 +552,40 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 			strokeQuad(screen, fc.pts)
 		}
 	}
-
-	ebitenutil.DebugPrintAt(screen, g.status(), 12, 12)
-	ebitenutil.DebugPrintAt(screen, "drag/arrows: orbit   shift+up/down or wheel: zoom   space: unfold   x: x-ray   r: scramble   s: solver", 12, winH-22)
 }
 
-func (g *gameState) status() string {
-	strat := ""
-	if len(g.ctrl.Strategies) > 0 {
-		strat = g.ctrl.Strategies[g.stratIdx]
+// drawMoveList shows the moves played so far, top-right, growing move-by-move as the
+// solve animates. The current move is marked; long lists scroll so it stays visible.
+func (g *gameState) drawMoveList(screen *ebiten.Image, v *cubeView) {
+	if len(v.moves) == 0 {
+		return
 	}
-	switch {
-	case g.solving:
-		return "solving... (" + strat + ")"
-	case len(g.moves) == 0:
-		if g.lastSolved {
-			return "[" + strat + "] already solved"
+	const lineH, colW = 16, 92
+	x0, y0 := g.w-colW, 30
+	capRows := (g.h - y0 - 24) / lineH
+	if capRows < 1 {
+		capRows = 1
+	}
+	last := min(v.idx, len(v.moves)-1) // reveal up to the current move
+	start := 0
+	if last-start+1 > capRows {
+		start = last - capRows + 1
+	}
+
+	played := min(v.idx, len(v.moves))
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("moves %d/%d", played, len(v.moves)), x0, 12)
+	for row, i := 0, start; i <= last; row, i = row+1, i+1 {
+		y := y0 + row*lineH
+		marker := "  "
+		if i == v.idx && v.idx < len(v.moves) {
+			vector.DrawFilledRect(screen, float32(x0-2), float32(y-1), colW, lineH, highlight, false)
+			marker = "> "
 		}
-		return "[" + strat + "] no solution found"
-	case g.idx < len(g.moves):
-		return fmt.Sprintf("[%s] move %d/%d  %s", strat, g.idx+1, len(g.moves), g.moves[g.idx])
-	case g.lastSolved:
-		return fmt.Sprintf("[%s] solved in %d moves", strat, len(g.moves))
-	default:
-		return fmt.Sprintf("[%s] stuck after %d moves", strat, len(g.moves))
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s%2d %s", marker, i+1, v.moves[i].String()), x0, y)
 	}
 }
 
-// turnAngle returns the axis (0=x,1=y,2=z) and current signed angle of the active turn.
-// Clockwise (viewed from outside the face) is a negative rotation about the outward axis.
-func (g *gameState) turnAngle() (int, float32) {
-	if !g.turning {
-		return 1, 0
-	}
-	var target float32
-	switch g.turnMove % 3 {
-	case 0:
-		target = -math.Pi / 2 // CW quarter
-	case 1:
-		target = math.Pi // half turn
-	default:
-		target = math.Pi / 2 // CCW quarter
-	}
-	axis, sign := faceAxis(g.turnMove.Face())
-	t := easeInOut(float32(g.turnFrame) / turnFrames)
-	return axis, float32(sign) * target * t
-}
-
-func (g *gameState) inTurnLayer(p poly) bool {
-	switch g.turnMove.Face() {
-	case 0:
-		return p.center.y > 0.5
-	case 3:
-		return p.center.y < -0.5
-	case 1:
-		return p.center.x > 0.5
-	case 4:
-		return p.center.x < -0.5
-	case 2:
-		return p.center.z > 0.5
-	default:
-		return p.center.z < -0.5
-	}
-}
-
-func (g *gameState) Layout(int, int) (int, int) { return winW, winH }
+func (g *gameState) Layout(int, int) (int, int) { return g.w, g.h }
 
 // faceAxis maps a face index to its rotation axis (0=x,1=y,2=z) and the sign of its
 // outward normal along that axis.
@@ -545,20 +677,79 @@ func fsincos(a float32) (float32, float32) {
 	return float32(s), float32(c)
 }
 
-// Play opens the self-driving visualizer driven by ctrl.
+// gridDims picks a near-square column/row count for n cells.
+func gridDims(n int) (cols, rows int) {
+	if n <= 1 {
+		return 1, 1
+	}
+	cols = int(math.Ceil(math.Sqrt(float64(n))))
+	rows = (n + cols - 1) / cols
+	return cols, rows
+}
+
+// windowSize is the single-cube window for a 1×1 grid, else a grid-sized window capped
+// at maxWin so cells stay legible.
+func windowSize(cols, rows int) (w, h int) {
+	if cols <= 1 && rows <= 1 {
+		return winW, winH
+	}
+	clampI := func(v, lo, hi int) int { return max(lo, min(v, hi)) }
+	return clampI(cols*cellSize, winW, maxWin), clampI(rows*cellSize, winH, maxWin)
+}
+
+func indexOf(names []string, name string) int {
+	for i, n := range names {
+		if n == name {
+			return i
+		}
+	}
+	return 0
+}
+
+func newSingleView(ctrl Controller) *cubeView {
+	v := &cubeView{ctrl: ctrl, stratIdx: ctrl.Start, solveCh: make(chan solveOut, 8)}
+	if ctrl.Initial != nil {
+		v.start = *ctrl.Initial
+	} else {
+		v.start = ctrl.Scramble()
+	}
+	return v
+}
+
+func newGridView(ctrl Controller, cell Cell) *cubeView {
+	return &cubeView{
+		ctrl:     ctrl,
+		start:    cell.Initial,
+		stratIdx: indexOf(ctrl.Strategies, cell.Strategy),
+		label:    cell.Label,
+		solveCh:  make(chan solveOut, 8),
+	}
+}
+
+// Play opens the visualizer driven by ctrl: a single self-driving cube, or — when
+// ctrl.Cells is set — a grid of independent cubes (replica mode).
 func Play(ctrl Controller) error {
 	g := &gameState{
-		ctrl: ctrl, polys: buildPolys(),
-		yaw: 0.6, pitch: 0.5, zoom: 1,
-		stratIdx: ctrl.Start, solveCh: make(chan solveOut, 8),
+		polys: buildPolys(),
+		yaw:   0.6, pitch: 0.5, zoom: 1,
 	}
-	if ctrl.Initial != nil {
-		g.start = *ctrl.Initial
+	if len(ctrl.Cells) == 0 {
+		g.views = []*cubeView{newSingleView(ctrl)}
 	} else {
-		g.start = ctrl.Scramble()
+		cells := ctrl.Cells
+		if len(cells) > maxCells {
+			cells = cells[:maxCells]
+		}
+		for _, cell := range cells {
+			g.views = append(g.views, newGridView(ctrl, cell))
+		}
 	}
-	g.kickSolve()
-	ebiten.SetWindowSize(winW, winH)
+	g.cols, g.rows = gridDims(len(g.views))
+	g.w, g.h = windowSize(g.cols, g.rows)
+	for _, v := range g.views {
+		v.kickSolve()
+	}
+	ebiten.SetWindowSize(g.w, g.h)
 	ebiten.SetWindowTitle("rubix")
 	return ebiten.RunGame(g)
 }

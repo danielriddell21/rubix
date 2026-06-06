@@ -27,6 +27,10 @@ func Run(args []string) int {
 	switch cmd {
 	case "solve":
 		err = cmdSolve(rest)
+	case "replica":
+		err = cmdReplica(rest, false)
+	case "compare":
+		err = cmdReplica(rest, true)
 	case "solvers":
 		err = cmdSolvers(rest)
 	case "scramble":
@@ -61,6 +65,7 @@ usage: rubix <command> [flags]
 
 commands:
   solve       solve a cube (from a facelet string or the robot)
+  replica     solve many cubes at once and compare (alias: compare)
   solvers     list the available solvers in video order
   scramble    generate a scramble and its facelet string
   verify      validate a facelet string
@@ -175,6 +180,20 @@ func guiController(initial *cube.Cube, start int) gui.Controller {
 	}
 }
 
+// gridController wires the visualizer to a grid of cubes, one cell per replica job,
+// reusing the single-cube controller's strategy list and solve function.
+func gridController(jobs []replicaJob) gui.Controller {
+	ctrl := guiController(nil, 0)
+	for _, j := range jobs {
+		ctrl.Cells = append(ctrl.Cells, gui.Cell{
+			Strategy: j.strategy,
+			Initial:  j.scramble,
+			Label:    fmt.Sprintf("#%d %s", j.index, j.strategy),
+		})
+	}
+	return ctrl
+}
+
 // strategyIndex returns the registry index of a solver name (0 if unknown).
 func strategyIndex(name string) int {
 	for i, n := range solver.Names() {
@@ -247,14 +266,21 @@ func cmdGenTables(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	// Warming the strongest solver builds and caches every prune table.
-	s, _ := solver.Get("prune")
 	fmt.Println("building prune tables...")
-	if _, err := s.Solve(cube.ScrambledCube(20, 1)); err != nil {
+	if err := warmTables(); err != nil {
 		return err
 	}
 	fmt.Println("done")
 	return nil
+}
+
+// warmTables builds and caches every prune table by running the strongest solver
+// once. Doing this before a parallel batch keeps goroutines from all blocking on the
+// one-time (sync.Once) table build.
+func warmTables() error {
+	s, _ := solver.Get("prune")
+	_, err := s.Solve(cube.ScrambledCube(20, 1))
+	return err
 }
 
 func cmdView(args []string) error {
