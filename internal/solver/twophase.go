@@ -61,22 +61,22 @@ func budgetFor(searchMode) uint64 { return 0 }
 // one exact pattern database, and the arc is realised as increasingly tight bounds:
 //
 //   - iddfs   — only the edge-orientation + slice database; corner orientation is left
-//               unconstrained, so it explores the most.
+//     unconstrained, so it explores the most.
 //   - idastar — that database plus a cheap corner-orientation lower bound (over four):
-//               a tighter admissible bound that cuts branches the edge table misses.
+//     a tighter admissible bound that cuts branches the edge table misses.
 //   - prune   — the exact maximum of both pattern databases: the fewest nodes.
 func phase1Bound(mode searchMode) search.Heuristic {
-	ts, fs := phase1Tables()
-	edgeSlice := func(c cube.Cube) int { return int(fs[flipCoord(c)*nUDSlice+udSliceCoord(c)]) }
-	cornerSlice := func(c cube.Cube) int { return int(ts[twistCoord(c)*nUDSlice+udSliceCoord(c)]) }
-	switch mode {
-	case modeIDDFS:
-		return edgeSlice
-	case modeIDAStar:
-		return func(c cube.Cube) int { return max(edgeSlice(c), ceilDiv(badCorners(c), 4)) }
-	default: // modePrune
-		return func(c cube.Cube) int { return max(edgeSlice(c), cornerSlice(c)) }
+	if mode == modePrune {
+		return phase1Heuristic() // exact maximum of both pattern databases
 	}
+	// iddfs / idastar bound only the edge-orientation + slice subproblem.
+	_, fs := phase1Tables()
+	edgeSlice := func(c cube.Cube) int { return int(fs[flipCoord(c)*nUDSlice+udSliceCoord(c)]) }
+	if mode == modeIDAStar {
+		// add a cheap corner-orientation lower bound on top of the edge table.
+		return func(c cube.Cube) int { return max(edgeSlice(c), ceilDiv(badCorners(c), 4)) }
+	}
+	return edgeSlice // modeIDDFS
 }
 
 // phase2Bound is the admissible lower bound on moves to solve within the domino group.

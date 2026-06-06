@@ -126,7 +126,7 @@ func cmdSolve(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	c, err := cubeFromInput(*input, *scan, r)
 	if err != nil {
@@ -252,7 +252,7 @@ func cmdScan(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	f, err := r.Scan()
 	if err != nil {
 		return err

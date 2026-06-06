@@ -209,9 +209,9 @@ func (v *cubeView) kickSolve() {
 	v.moves = nil
 	v.solving = true
 	v.gen++
-	gen, strat, start, ch, solve := v.gen, v.ctrl.Strategies[v.stratIdx], v.start, v.solveCh, v.ctrl.Solve
+	gen, strategy, start, ch, solve := v.gen, v.ctrl.Strategies[v.stratIdx], v.start, v.solveCh, v.ctrl.Solve
 	go func() {
-		mv, ok := solve(strat, start)
+		mv, ok := solve(strategy, start)
 		ch <- solveOut{gen, mv, ok}
 	}()
 }
@@ -258,7 +258,7 @@ func (v *cubeView) advanceSolve(unfold float32) {
 	}
 }
 
-func (v *cubeView) strat() string {
+func (v *cubeView) strategy() string {
 	if len(v.ctrl.Strategies) > 0 {
 		return v.ctrl.Strategies[v.stratIdx]
 	}
@@ -266,21 +266,21 @@ func (v *cubeView) strat() string {
 }
 
 func (v *cubeView) status() string {
-	strat := v.strat()
+	strategy := v.strategy()
 	switch {
 	case v.solving:
-		return "solving... (" + strat + ")"
+		return "solving... (" + strategy + ")"
 	case len(v.moves) == 0:
 		if v.lastSolved {
-			return "[" + strat + "] already solved"
+			return "[" + strategy + "] already solved"
 		}
-		return "[" + strat + "] no solution found"
+		return "[" + strategy + "] no solution found"
 	case v.idx < len(v.moves):
-		return fmt.Sprintf("[%s] move %d/%d  %s", strat, v.idx+1, len(v.moves), v.moves[v.idx])
+		return fmt.Sprintf("[%s] move %d/%d  %s", strategy, v.idx+1, len(v.moves), v.moves[v.idx])
 	case v.lastSolved:
-		return fmt.Sprintf("[%s] solved in %d moves", strat, len(v.moves))
+		return fmt.Sprintf("[%s] solved in %d moves", strategy, len(v.moves))
 	default:
-		return fmt.Sprintf("[%s] stuck after %d moves", strat, len(v.moves))
+		return fmt.Sprintf("[%s] stuck after %d moves", strategy, len(v.moves))
 	}
 }
 
@@ -438,7 +438,7 @@ func (g *gameState) Update() error {
 		v := g.views[g.focus]
 		if len(v.ctrl.Strategies) > 0 {
 			v.stratIdx = (v.stratIdx + 1) % len(v.ctrl.Strategies)
-			v.label = fmt.Sprintf("#%d %s", g.focus, v.strat())
+			v.label = fmt.Sprintf("#%d %s", g.focus, v.strategy())
 			v.kickSolve()
 		}
 	}
@@ -578,7 +578,7 @@ func (g *gameState) drawMoveList(screen *ebiten.Image, v *cubeView) {
 		y := y0 + row*lineH
 		marker := "  "
 		if i == v.idx && v.idx < len(v.moves) {
-			vector.DrawFilledRect(screen, float32(x0-2), float32(y-1), colW, lineH, highlight, false)
+			vector.FillRect(screen, float32(x0-2), float32(y-1), colW, lineH, highlight, false)
 			marker = "> "
 		}
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s%2d %s", marker, i+1, v.moves[i].String()), x0, y)
@@ -642,7 +642,10 @@ func fillQuad(screen *ebiten.Image, q [4][2]float32, col color.RGBA) {
 	path.LineTo(q[2][0], q[2][1])
 	path.LineTo(q[3][0], q[3][1])
 	path.Close()
-	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil)
+	// The v2.9 replacement (vector.FillPath) batches and flushes via a callback, which
+	// would reorder these fills relative to the strokes drawn between them and break the
+	// back-to-front painter ordering. Keep the immediate-mode vertex path on purpose.
+	vs, is := path.AppendVerticesAndIndicesForFilling(nil, nil) //nolint:staticcheck // SA1019
 	r, gg, b, a := float32(col.R)/255, float32(col.G)/255, float32(col.B)/255, float32(col.A)/255
 	for i := range vs {
 		vs[i].SrcX, vs[i].SrcY = 1, 1

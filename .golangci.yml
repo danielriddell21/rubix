@@ -1,0 +1,23 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  # Keep the standard set (errcheck, govet, ineffassign, staticcheck, unused) and add a
+  # couple of low-false-positive checks.
+  enable:
+    - misspell
+    - unconvert
+  settings:
+    errcheck:
+      # Writes to stdout/stderr/tabwriter: a failed terminal write is not actionable.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

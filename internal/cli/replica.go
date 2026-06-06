@@ -157,7 +157,7 @@ func printReplicaTable(w io.Writer, results []replicaResult) {
 			j.index, j.strategy, j.seed, len(r.res.Moves), mark,
 			r.res.Elapsed.Round(time.Millisecond), r.res.Nodes)
 	}
-	tw.Flush()
+	_ = tw.Flush()
 
 	fmt.Fprintf(w, "\n%d/%d solved", solved, len(results))
 	if solved > 0 {

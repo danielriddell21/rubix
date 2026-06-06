@@ -58,7 +58,7 @@ var co3 = [5]uint64{0, 1, 2, 0, 1}
 
 func init() {
 	for m := range cube.NumMoves {
-		mc := cube.Solved().Applied(cube.Move(m))
+		mc := cube.Solved().Applied(m)
 		var ek uint64
 		ec := 0
 		for i := range 12 {

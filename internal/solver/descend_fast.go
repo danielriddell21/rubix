@@ -45,7 +45,9 @@ func descend(start state, eval stateEval, isGoal func(state) bool, stop terminal
 			return sol, nodes
 		}
 		base := eval(cur) * scoreScale
-		best, bestMove, improved := base, cube.Move(0), false
+		var best int
+		var bestMove cube.Move
+		improved := false
 		for d := minDepth; d <= maxDepth; d++ {
 			var n uint64
 			best, bestMove = bestFirst(cur, eval, isGoal, stop, moves, d, &n)
