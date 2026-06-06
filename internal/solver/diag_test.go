@@ -23,7 +23,7 @@ func TestDiagTiming(t *testing.T) {
 	for _, s := range All() {
 		var solved, moves int
 		start := time.Now()
-		for seed := int64(0); seed < n; seed++ {
+		for seed := int64(0); seed < int64(n); seed++ {
 			c := cube.ScrambledCube(25, seed)
 			res, err := s.Solve(c)
 			if err != nil {
