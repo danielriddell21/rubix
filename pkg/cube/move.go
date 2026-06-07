@@ -4,6 +4,8 @@ package cube
 // (face = m/3) and power (m%3: 0 = 90° CW, 1 = 180°, 2 = 90° CCW / prime).
 type Move uint8
 
+// The 18 face turns, three per face: 90° CW, 180°, and 90° CCW (prime). NumMoves is the
+// count of real moves.
 const (
 	U Move = iota
 	U2

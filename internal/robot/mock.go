@@ -27,6 +27,7 @@ func (m *Mock) SetScan(f cube.Facelets) {
 	m.HasState = true
 }
 
+// Scan returns the preset facelets, or an error if none were configured.
 func (m *Mock) Scan() (cube.Facelets, error) {
 	if !m.HasState {
 		return cube.Facelets{}, errors.New("mock robot has no cube to scan; pass --input with the facelet string")
@@ -34,6 +35,7 @@ func (m *Mock) Scan() (cube.Facelets, error) {
 	return m.Scanned, nil
 }
 
+// Execute prints the moves and the primitive plan a real machine would perform.
 func (m *Mock) Execute(moves []cube.Move) error {
 	prims := PlanMoves(moves)
 	fmt.Fprintf(m.Out, "moves (%d): %s\n", len(moves), cube.FormatMoves(moves))
@@ -44,6 +46,11 @@ func (m *Mock) Execute(moves []cube.Move) error {
 	return nil
 }
 
-func (m *Mock) Home() error      { fmt.Fprintln(m.Out, "home"); return nil }
+// Home reports the home operation.
+func (m *Mock) Home() error { fmt.Fprintln(m.Out, "home"); return nil }
+
+// Calibrate reports the calibrate operation.
 func (m *Mock) Calibrate() error { fmt.Fprintln(m.Out, "calibrate"); return nil }
-func (m *Mock) Close() error     { return nil }
+
+// Close is a no-op for the mock driver.
+func (m *Mock) Close() error { return nil }

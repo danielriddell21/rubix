@@ -16,8 +16,9 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// Run dispatches a subcommand. It returns a process exit code.
-func Run(args []string) int {
+// Run dispatches a subcommand. version is the build version reported by the version
+// command. It returns a process exit code.
+func Run(version string, args []string) int {
 	if len(args) < 1 {
 		usage(os.Stderr)
 		return 2
@@ -25,6 +26,9 @@ func Run(args []string) int {
 	cmd, rest := args[0], args[1:]
 	var err error
 	switch cmd {
+	case "version", "--version", "-v":
+		fmt.Println("rubix", version)
+		return 0
 	case "solve":
 		err = cmdSolve(rest)
 	case "replica":
@@ -72,6 +76,7 @@ commands:
   scan        scan a cube with the robot and print its facelets
   gen-tables  precompute and cache the prune tables
   view        open the self-driving visualizer (needs -tags ebiten)
+  version     print the rubix version
 
 run "rubix <command> -h" for command flags.
 `)

@@ -9,6 +9,10 @@ import (
 	"github.com/danielriddell21/rubix/internal/cli"
 )
 
+// version is the build version, overridden at release time via
+// -ldflags "-X main.version=...". It defaults to "dev" for local builds.
+var version = "dev"
+
 func main() {
-	os.Exit(cli.Run(os.Args[1:]))
+	os.Exit(cli.Run(version, os.Args[1:]))
 }

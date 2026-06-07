@@ -1,0 +1,81 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # Headless CLI: CGO-free, cross-compiled to every desktop OS/arch.
+  - id: headless
+    main: ./cmd/rubix
+    binary: rubix
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+  # GUI build: the same CLI with the Ebiten visualizer compiled in. Needs cgo (Metal /
+  # Cocoa), so it is macOS-only and built natively on the macOS runner.
+  - id: gui
+    main: ./cmd/rubix
+    binary: rubix-gui
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -tags=ebiten
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: headless
+    ids: [headless]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+  - id: gui
+    ids: [gui]
+    name_template: "{{ .ProjectName }}-gui_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge"
+
+release:
+  name_template: "v{{ .Version }}"
+
+# Deprecated in GoReleaser, but the only way to produce a Linux-installable formula, so
+# kept for the cross-platform CLI.
+brews:
+  - repository:
+      owner: danielriddell21
+      name: homebrew-tap
+      branch: trunk
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    ids: [headless]
+    directory: Formula
+    install: |
+      bin.install "rubix"
+    test: |
+      system "#{bin}/rubix", "--version"
+
+# macOS-only GUI cask.
+homebrew_casks:
+  - repository:
+      owner: danielriddell21
+      name: homebrew-tap
+      branch: trunk
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    ids: [gui]
+    caveats: "The rubix visualizer opens a window and is macOS-only."

@@ -1,5 +1,9 @@
 # rubix
 
+[![CI](https://github.com/danielriddell21/rubix/actions/workflows/ci.yaml/badge.svg)](https://github.com/danielriddell21/rubix/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/danielriddell21/rubix/branch/trunk/graph/badge.svg)](https://codecov.io/gh/danielriddell21/rubix)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=danielriddell21_rubix&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=danielriddell21_rubix)
+
 A Rubik's cube solver in Go. The cube lives as plain data in a headless core, solved
 nine different ways, with an optional 3D visualizer and a LEGO Mindstorms EV3 driver.
 

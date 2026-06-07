@@ -3,5 +3,8 @@
 /rubix-ev3
 *.exe
 
+# GoReleaser output
+/dist/
+
 # Generated pruning-table cache
 /tables/*.prt

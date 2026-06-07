@@ -4,11 +4,14 @@ run:
   timeout: 5m
 
 linters:
-  # Keep the standard set (errcheck, govet, ineffassign, staticcheck, unused) and add a
-  # couple of low-false-positive checks.
+  default: none
   enable:
-    - misspell
-    - unconvert
+    - errcheck
+    - govet
+    - staticcheck
+    - revive
+    - ineffassign
+    - unused
   settings:
     errcheck:
       # Writes to stdout/stderr/tabwriter: a failed terminal write is not actionable.
@@ -16,8 +19,31 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+    revive:
+      rules:
+        - name: exported
+        - name: error-return
+        - name: error-naming
+        - name: error-strings
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unused-parameter
+          disabled: true
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - revive
 
 formatters:
   enable:
     - gofmt
     - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -1,0 +1,24 @@
+# go-gremlins mutation testing config. `gremlins unleash` fails the build if too few
+# mutants are killed, catching tests that pass without really asserting behaviour.
+unleash:
+  threshold:
+    efficacy: 50
+    mutant-coverage: 50
+
+# The CLI entrypoint is glue (flag parsing / dispatch); exclude it from mutation.
+exclude-files:
+  - "cmd/.*"
+
+mutants:
+  arithmetic-base:
+    enabled: true
+  conditionals-boundary:
+    enabled: true
+  conditionals-negation:
+    enabled: true
+  increment-decrement:
+    enabled: true
+  invert-negatives:
+    enabled: true
+  invert-logical:
+    enabled: true

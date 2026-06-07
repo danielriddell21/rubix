@@ -9,6 +9,7 @@ import (
 // 0=U, 1=R, 2=F, 3=D, 4=L, 5=B.
 type Color uint8
 
+// The colours, one per cube face on a solved cube.
 const (
 	ColU Color = iota
 	ColR
