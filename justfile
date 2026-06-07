@@ -44,3 +44,15 @@ replica args="":
 # open the self-driving visualizer (needs the ebiten build)
 view:
     go run -tags ebiten ./cmd/rubix view
+
+# record one GIF per keybind into docs/demos/ (needs the ebiten build and a display)
+demos:
+    mkdir -p docs/demos
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/unfold.gif       --record-keys space
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/xray.gif         --record-keys x
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/rescramble.gif   --record-keys r
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/cycle-solver.gif --record-keys s
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/move-list.gif    --record-keys m
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/orbit.gif        --record-keys left
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/zoom.gif         --record-keys shift+up
+    go run -tags ebiten ./cmd/rubix replica -count 4 -seed 1 -view --record docs/demos/focus.gif --record-keys tab

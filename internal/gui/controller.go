@@ -19,6 +19,16 @@ type Controller struct {
 	// Cells, when non-empty, drives a grid of independent cubes (replica mode) instead
 	// of the single self-driving cube. Each cell carries its own scramble and strategy.
 	Cells []Cell
+
+	// Recording: when Record is non-empty the visualizer captures RecordFrames frames to
+	// the GIF at Record (each downscaled by RecordScale, played back at RecordFPS),
+	// optionally scripting the keybinds named in RecordKeys, then exits. These are
+	// ignored by the stub (non-ebiten) build.
+	Record       string
+	RecordFrames int
+	RecordFPS    int
+	RecordScale  int
+	RecordKeys   string
 }
 
 // Cell is one cube in a replica grid: a starting scramble, the strategy that solves it,

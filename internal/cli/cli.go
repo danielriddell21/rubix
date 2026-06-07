@@ -114,6 +114,7 @@ func cmdSolve(args []string) error {
 	strategy := fs.String("strategy", "prune", "solver: "+strings.Join(solver.Names(), ", "))
 	execute := fs.Bool("execute", false, "run the solution on the robot")
 	view := fs.Bool("view", false, "animate the solution in the visualizer (needs -tags ebiten)")
+	rec := addRecordFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -151,19 +152,57 @@ func cmdSolve(args []string) error {
 		}
 	}
 	if *view {
-		return gui.Play(guiController(&c, strategyIndex(*strategy)))
+		return gui.Play(rec.apply(guiController(&c, strategyIndex(*strategy), 0)))
 	}
 	return nil
 }
 
+// recordOpts holds the visualizer recording flags shared across the GUI-launching
+// commands. The CLI uses stdlib flag, which has no persistent flags, so addRecordFlags
+// registers them on each command's flag set.
+type recordOpts struct {
+	path   string
+	frames int
+	fps    int
+	scale  int
+	keys   string
+}
+
+// addRecordFlags registers the --record* flags on fs and returns the destination opts.
+func addRecordFlags(fs *flag.FlagSet) *recordOpts {
+	o := &recordOpts{}
+	fs.StringVar(&o.path, "record", "", "record the visualizer to this GIF path, then exit (needs -tags ebiten)")
+	fs.IntVar(&o.frames, "record-frames", 120, "number of frames to capture when recording")
+	fs.IntVar(&o.fps, "record-fps", 25, "GIF playback frames per second")
+	fs.IntVar(&o.scale, "record-scale", 2, "integer downscale factor for the recorded GIF")
+	fs.StringVar(&o.keys, "record-keys", "", "comma-separated keybinds to script while recording (e.g. space, x, left, shift+up, tab)")
+	return o
+}
+
+// apply copies the recording options onto a controller.
+func (o *recordOpts) apply(ctrl gui.Controller) gui.Controller {
+	ctrl.Record = o.path
+	ctrl.RecordFrames = o.frames
+	ctrl.RecordFPS = o.fps
+	ctrl.RecordScale = o.scale
+	ctrl.RecordKeys = o.keys
+	return ctrl
+}
+
 // guiController wires the visualizer to the solver: a strategy list, a fresh-scramble
-// source and a solve function. initial, if set, is the cube shown on load.
-func guiController(initial *cube.Cube, start int) gui.Controller {
+// source and a solve function. initial, if set, is the cube shown on load. A non-zero
+// seed makes the scramble sequence reproducible (for deterministic recordings).
+func guiController(initial *cube.Cube, start int, seed int64) gui.Controller {
+	nextSeed := func() int64 { return rand.Int64() }
+	if seed != 0 {
+		rng := rand.New(rand.NewPCG(uint64(seed), uint64(seed)))
+		nextSeed = func() int64 { return int64(rng.Uint64()) }
+	}
 	return gui.Controller{
 		Strategies: solver.Names(),
 		Start:      start,
 		Initial:    initial,
-		Scramble:   func() cube.Cube { return cube.ScrambledCube(25, rand.Int64()) },
+		Scramble:   func() cube.Cube { return cube.ScrambledCube(25, nextSeed()) },
 		Solve: func(name string, c cube.Cube) ([]cube.Move, bool) {
 			s, err := solver.Get(name)
 			if err != nil {
@@ -183,7 +222,7 @@ func guiController(initial *cube.Cube, start int) gui.Controller {
 // gridController wires the visualizer to a grid of cubes, one cell per replica job,
 // reusing the single-cube controller's strategy list and solve function.
 func gridController(jobs []replicaJob) gui.Controller {
-	ctrl := guiController(nil, 0)
+	ctrl := guiController(nil, 0, 0)
 	for _, j := range jobs {
 		ctrl.Cells = append(ctrl.Cells, gui.Cell{
 			Strategy: j.strategy,
@@ -285,10 +324,12 @@ func warmTables() error {
 
 func cmdView(args []string) error {
 	fs := flag.NewFlagSet("view", flag.ContinueOnError)
+	seed := fs.Int64("seed", 0, "scramble seed (0 = random each run); set for reproducible recordings")
+	rec := addRecordFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	// The visualizer is self-driving: it scrambles and solves on its own; press "r"
 	// for a new scramble and "s" to switch solver.
-	return gui.Play(guiController(nil, strategyIndex("multi")))
+	return gui.Play(rec.apply(guiController(nil, strategyIndex("multi"), *seed)))
 }

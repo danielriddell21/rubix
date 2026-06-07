@@ -13,6 +13,7 @@ import (
 	"image/color"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -359,30 +360,151 @@ type gameState struct {
 
 	focus     int
 	showMoves bool
+
+	// Recording (set when ctrl.Record != ""): captures frames in Draw and, once enough
+	// are gathered, saves the GIF and ends the run from Update. script, when set, injects
+	// keybinds on a frame timeline so each demo records the same actions every run.
+	rec       *recorder
+	recPath   string
+	recFrames int
+	recSaved  bool
+	frame     int
+	script    *keyScript
 }
 
 func (g *gameState) grid() bool { return len(g.views) > 1 }
 
+// frameRange is an inclusive interval of frame indices during which a key is held.
+type frameRange struct{ lo, hi int }
+
+// keyScript injects keybinds on a fixed timeline so a recording performs the same actions
+// every run: taps fire a single just-pressed at the given frame(s); holds keep a key down
+// across a range of frames.
+type keyScript struct {
+	taps  map[ebiten.Key][]int
+	holds map[ebiten.Key][]frameRange
+}
+
+func (s *keyScript) justPressed(k ebiten.Key, frame int) bool {
+	if s == nil {
+		return false
+	}
+	for _, f := range s.taps[k] {
+		if f == frame {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *keyScript) held(k ebiten.Key, frame int) bool {
+	if s == nil {
+		return false
+	}
+	for _, r := range s.holds[k] {
+		if frame >= r.lo && frame <= r.hi {
+			return true
+		}
+	}
+	return false
+}
+
+// keyDown reports a key as held if the user is pressing it or the script holds it now.
+func (g *gameState) keyDown(k ebiten.Key) bool {
+	return ebiten.IsKeyPressed(k) || g.script.held(k, g.frame)
+}
+
+// keyTapped reports a fresh press from the user or a scripted tap on this frame.
+func (g *gameState) keyTapped(k ebiten.Key) bool {
+	return inpututil.IsKeyJustPressed(k) || g.script.justPressed(k, g.frame)
+}
+
+// buildScript turns a comma-separated keybind list (e.g. "space", "left", "shift+up",
+// "tab") into a timeline over recFrames frames. Toggle keys are tapped twice (on, then
+// off) so the GIF shows both states; one-shot actions tap once; orbit/zoom keys are held
+// for the whole clip. It returns nil when no keys are given.
+func buildScript(keys string, recFrames int) *keyScript {
+	const intro = 12 // brief pause so the opening state is visible before acting
+	s := &keyScript{taps: map[ebiten.Key][]int{}, holds: map[ebiten.Key][]frameRange{}}
+	tapToggle := func(k ebiten.Key) { s.taps[k] = append(s.taps[k], intro, recFrames/2) }
+	tapOnce := func(k ebiten.Key) { s.taps[k] = append(s.taps[k], intro) }
+	hold := func(k ebiten.Key) { s.holds[k] = append(s.holds[k], frameRange{intro, recFrames}) }
+
+	any := false
+	for _, raw := range strings.Split(keys, ",") {
+		tok := strings.ToLower(strings.TrimSpace(raw))
+		if tok == "" {
+			continue
+		}
+		any = true
+		switch tok {
+		case "space":
+			tapToggle(ebiten.KeySpace)
+		case "x":
+			tapToggle(ebiten.KeyX)
+		case "m":
+			tapToggle(ebiten.KeyM)
+		case "r":
+			tapOnce(ebiten.KeyR)
+		case "s":
+			tapOnce(ebiten.KeyS)
+		case "tab":
+			tapOnce(ebiten.KeyTab)
+		case "left":
+			hold(ebiten.KeyArrowLeft)
+		case "right":
+			hold(ebiten.KeyArrowRight)
+		case "up":
+			hold(ebiten.KeyArrowUp)
+		case "down":
+			hold(ebiten.KeyArrowDown)
+		case "shift+up":
+			hold(ebiten.KeyShiftLeft)
+			hold(ebiten.KeyArrowUp)
+		case "shift+down":
+			hold(ebiten.KeyShiftLeft)
+			hold(ebiten.KeyArrowDown)
+		}
+	}
+	if !any {
+		return nil
+	}
+	return s
+}
+
 func (g *gameState) Update() error {
+	if g.rec != nil {
+		g.frame++
+		if g.rec.len() >= g.recFrames {
+			if !g.recSaved {
+				if err := g.rec.save(g.recPath); err != nil {
+					return err
+				}
+				g.recSaved = true
+			}
+			return ebiten.Termination
+		}
+	}
+
 	for _, v := range g.views {
 		v.drainSolve()
 	}
 
-	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight)
+	shift := g.keyDown(ebiten.KeyShiftLeft) || g.keyDown(ebiten.KeyShiftRight)
 
 	// Orbit (only while folded up); the view locks and faces the net once unfolded.
 	if g.unfold < 0.5 {
-		if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
+		if g.keyDown(ebiten.KeyArrowLeft) {
 			g.yaw -= orbitSpeed
 		}
-		if ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
+		if g.keyDown(ebiten.KeyArrowRight) {
 			g.yaw += orbitSpeed
 		}
 		if !shift {
-			if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
+			if g.keyDown(ebiten.KeyArrowUp) {
 				g.pitch -= orbitSpeed
 			}
-			if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
+			if g.keyDown(ebiten.KeyArrowDown) {
 				g.pitch += orbitSpeed
 			}
 		}
@@ -408,16 +530,16 @@ func (g *gameState) Update() error {
 		g.zoom *= float32(math.Pow(1.12, dy))
 	}
 	if shift {
-		if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
+		if g.keyDown(ebiten.KeyArrowUp) {
 			g.zoom *= 1 + zoomSpeed
 		}
-		if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
+		if g.keyDown(ebiten.KeyArrowDown) {
 			g.zoom *= 1 - zoomSpeed
 		}
 	}
 	g.zoom = clamp(g.zoom, 0.5, 3)
 
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+	if g.keyTapped(ebiten.KeySpace) {
 		if g.unfoldTo == 0 {
 			g.unfoldTo = 1
 		} else {
@@ -426,15 +548,15 @@ func (g *gameState) Update() error {
 	}
 	g.unfold += clamp(g.unfoldTo-g.unfold, -unfoldSpeed, unfoldSpeed)
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyX) {
+	if g.keyTapped(ebiten.KeyX) {
 		g.xray = !g.xray
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
+	if g.keyTapped(ebiten.KeyR) {
 		for _, v := range g.views {
 			v.rescramble(v.ctrl.Scramble)
 		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+	if g.keyTapped(ebiten.KeyS) {
 		v := g.views[g.focus]
 		if len(v.ctrl.Strategies) > 0 {
 			v.stratIdx = (v.stratIdx + 1) % len(v.ctrl.Strategies)
@@ -442,10 +564,10 @@ func (g *gameState) Update() error {
 			v.kickSolve()
 		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyTab) && g.grid() {
+	if g.keyTapped(ebiten.KeyTab) && g.grid() {
 		g.focus = (g.focus + 1) % len(g.views)
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+	if g.keyTapped(ebiten.KeyM) {
 		g.showMoves = !g.showMoves
 	}
 
@@ -490,6 +612,13 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 
 	if g.showMoves {
 		g.drawMoveList(screen, fv)
+	}
+
+	if g.rec != nil && g.rec.len() < g.recFrames {
+		w, h := screen.Bounds().Dx(), screen.Bounds().Dy()
+		buf := make([]byte, 4*w*h)
+		screen.ReadPixels(buf)
+		g.rec.add(&image.RGBA{Pix: buf, Stride: 4 * w, Rect: image.Rect(0, 0, w, h)})
 	}
 }
 
@@ -749,6 +878,15 @@ func Play(ctrl Controller) error {
 	}
 	g.cols, g.rows = gridDims(len(g.views))
 	g.w, g.h = windowSize(g.cols, g.rows)
+	if ctrl.Record != "" {
+		g.recPath = ctrl.Record
+		g.recFrames = ctrl.RecordFrames
+		if g.recFrames < 1 {
+			g.recFrames = 120
+		}
+		g.rec = newRecorder(ctrl.RecordScale, ctrl.RecordFPS)
+		g.script = buildScript(ctrl.RecordKeys, g.recFrames)
+	}
 	for _, v := range g.views {
 		v.kickSolve()
 	}

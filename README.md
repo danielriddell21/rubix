@@ -39,6 +39,8 @@ go run -tags ebiten ./cmd/rubix view
 | `r` | new scramble |
 | `s` | switch solver |
 
+See [docs/demos.md](docs/demos.md) for an animated GIF of each keybind.
+
 <details>
 <summary>Linux: OpenGL/X11 libraries</summary>
 

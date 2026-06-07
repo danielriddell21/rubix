@@ -45,6 +45,7 @@ func cmdReplica(args []string, compareDefault bool) error {
 	seed := fs.Int64("seed", 0, "base seed; cube i uses seed+i (0 = random each run)")
 	n := fs.Int("n", 25, "scramble length (moves)")
 	view := fs.Bool("view", false, "open the visualizer grid instead of printing a table (needs -tags ebiten)")
+	rec := addRecordFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -72,7 +73,7 @@ func cmdReplica(args []string, compareDefault bool) error {
 	}
 
 	if *view {
-		return gui.Play(gridController(jobs))
+		return gui.Play(rec.apply(gridController(jobs)))
 	}
 
 	if err := warmTables(); err != nil {
