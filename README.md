@@ -73,8 +73,8 @@ scrambles:
 | 1 | `greedy`   | greedy best-first by solved-cubie count | ~10% (often stuck) |
 | 2 | `sandwich` | greedy + backward-search dictionary | ~45% |
 | 3 | `oriented` | orient all edges, then solve with F/B turns removed | ~33% |
-| 4 | `cfop`     | Cross → F2L → OLL → PLL, staged | 100%, ~57 moves |
-| 5 | `domino`   | reduce to the domino state, then solve it | 100%, ~30 moves |
+| 4 | `cfop`     | Cross → F2L → OLL → PLL, staged | 100%, ~55 moves |
+| 5 | `domino`   | reduce to the domino state, then solve it | ~99%, ~30 moves |
 | 6 | `iddfs`    | domino search via iterative deepening | 100%, ~23 moves |
 | 7 | `idastar`  | + a lower-bound prune | 100%, ~23 moves |
 | 8 | `prune`    | + exact prune tables (big speedup) | 100%, ~23 moves |
