@@ -120,7 +120,11 @@ func cmdSolve(args []string) error {
 	execute := fs.Bool("execute", false, "run the solution on the robot")
 	view := fs.Bool("view", false, "animate the solution in the visualizer (needs -tags ebiten)")
 	rec := addRecordFlags(fs)
+	format, output := addFormatFlags(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := validFormat(*format); err != nil {
 		return err
 	}
 
@@ -143,13 +147,21 @@ func cmdSolve(args []string) error {
 	if err != nil {
 		return err
 	}
+	out := solveOutput{
+		Strategy:  res.Strategy,
+		Solved:    res.Solved,
+		Moves:     cube.FormatMoves(res.Moves),
+		MoveList:  moveStrings(res.Moves),
+		MoveCount: len(res.Moves),
+		Nodes:     res.Nodes,
+		ElapsedMS: res.Elapsed.Milliseconds(),
+	}
+	if err := renderSolve(*format, *output, out); err != nil {
+		return err
+	}
 	if !res.Solved {
-		fmt.Printf("%s gave up after %d moves (this solver does not always succeed)\n", res.Strategy, len(res.Moves))
 		return nil
 	}
-	fmt.Printf("strategy: %s\n", res.Strategy)
-	fmt.Printf("solution (%d moves): %s\n", len(res.Moves), cube.FormatMoves(res.Moves))
-	fmt.Printf("nodes: %d   time: %s\n", res.Nodes, res.Elapsed.Round(1e6))
 
 	if *execute {
 		if err := r.Execute(res.Moves); err != nil {
@@ -248,25 +260,41 @@ func strategyIndex(name string) int {
 	return 0
 }
 
-func cmdSolvers([]string) error {
-	for i, s := range solver.All() {
-		fmt.Printf("%d. %-9s %s\n", i+1, s.Name(), s.Describe())
+func cmdSolvers(args []string) error {
+	fs := flag.NewFlagSet("solvers", flag.ContinueOnError)
+	format, output := addFormatFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	return nil
+	if err := validFormat(*format); err != nil {
+		return err
+	}
+	list := make([]solverInfo, 0, len(solver.All()))
+	for _, s := range solver.All() {
+		list = append(list, solverInfo{Name: s.Name(), Describe: s.Describe()})
+	}
+	return renderSolvers(*format, *output, list)
 }
 
 func cmdScramble(args []string) error {
 	fs := flag.NewFlagSet("scramble", flag.ContinueOnError)
 	n := fs.Int("n", 25, "number of random moves")
 	seed := fs.Int64("seed", 0, "random seed")
+	format, output := addFormatFlags(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := validFormat(*format); err != nil {
 		return err
 	}
 	moves := cube.Scramble(*n, *seed)
 	c := cube.Solved().Applied(moves...)
-	fmt.Printf("scramble: %s\n", cube.FormatMoves(moves))
-	fmt.Printf("facelets: %s\n", c.ToFacelets())
-	return nil
+	return renderScramble(*format, *output, scrambleOutput{
+		N:        *n,
+		Seed:     *seed,
+		Scramble: cube.FormatMoves(moves),
+		Facelets: c.ToFacelets().String(),
+	})
 }
 
 func cmdVerify(args []string) error {

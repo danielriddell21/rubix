@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -46,7 +45,11 @@ func cmdReplica(args []string, compareDefault bool) error {
 	n := fs.Int("n", 25, "scramble length (moves)")
 	view := fs.Bool("view", false, "open the visualizer grid instead of printing a table (needs -tags ebiten)")
 	rec := addRecordFlags(fs)
+	format, output := addFormatFlags(fs)
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := validFormat(*format); err != nil {
 		return err
 	}
 	if *count < 1 {
@@ -79,8 +82,44 @@ func cmdReplica(args []string, compareDefault bool) error {
 	if err := warmTables(); err != nil {
 		return err
 	}
-	printReplicaTable(os.Stdout, solveBatch(jobs))
-	return nil
+	results := solveBatch(jobs)
+	if *format == "text" {
+		return withOutput(*output, func(w io.Writer) error {
+			printReplicaTable(w, results)
+			return nil
+		})
+	}
+	return renderReplica(*format, *output, buildReplicaOutput(results))
+}
+
+// buildReplicaOutput converts solve results into the structured form used by the JSON and
+// CSV renderers, mirroring the totals printReplicaTable computes for the text table.
+func buildReplicaOutput(results []replicaResult) replicaOutput {
+	out := replicaOutput{Results: make([]replicaRow, 0, len(results))}
+	solved, totalMoves := 0, 0
+	for _, r := range results {
+		j := r.job
+		row := replicaRow{Index: j.index, Strategy: j.strategy, Seed: j.seed}
+		if r.err != nil {
+			row.Error = r.err.Error()
+			out.Results = append(out.Results, row)
+			continue
+		}
+		row.MoveCount = len(r.res.Moves)
+		row.Solved = r.res.Solved
+		row.TimeMS = r.res.Elapsed.Milliseconds()
+		row.Nodes = r.res.Nodes
+		if r.res.Solved {
+			solved++
+			totalMoves += len(r.res.Moves)
+		}
+		out.Results = append(out.Results, row)
+	}
+	out.Summary = replicaSummary{Solved: solved, Total: len(results)}
+	if solved > 0 {
+		out.Summary.AvgMoves = float64(totalMoves) / float64(solved)
+	}
+	return out
 }
 
 // resolveStrategies turns the -strategies/-compare flags into a validated solver list.

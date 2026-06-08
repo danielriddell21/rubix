@@ -25,6 +25,14 @@ go run ./cmd/rubix solve --input <54-chars> --strategy multi
 `--execute` prints the robot move/primitive plan; `verify`, `scan` and `gen-tables`
 are the other subcommands.
 
+`solve`, `replica`/`compare`, `scramble` and `solvers` take `-format json|csv` and
+`-output <file>` for machine-readable results, e.g.:
+
+```sh
+go run ./cmd/rubix replica -count 8 -seed 1 -format csv -output results.csv
+go run ./cmd/rubix solve --input <54-chars> --strategy multi -format json
+```
+
 ## Watch it solve
 
 The 3D visualizer is behind the `ebiten` build tag. It scrambles and solves on its

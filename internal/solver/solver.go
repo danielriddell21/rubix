@@ -83,8 +83,14 @@ func timed(name string, c cube.Cube, solve func(cube.Cube) (moves []cube.Move, s
 	if err != nil {
 		return Result{}, err
 	}
-	if solved && !c.Applied(moves...).IsSolved() {
-		return Result{}, fmt.Errorf("%s: produced an invalid solution", name)
+	if solved {
+		// Cancel redundant turns so the reported solution is as short as possible, then
+		// confirm the trimmed sequence still solves the cube. Unsolved attempts are left
+		// as-is so the incomplete solvers' "getting stuck" playback stays faithful.
+		moves = cube.Simplify(moves)
+		if !c.Applied(moves...).IsSolved() {
+			return Result{}, fmt.Errorf("%s: produced an invalid solution", name)
+		}
 	}
 	return Result{Moves: moves, Strategy: name, Nodes: nodes, Elapsed: elapsed, Solved: solved}, nil
 }
