@@ -1,5 +1,7 @@
 version: 2
 
+project_name: rubix
+
 before:
   hooks:
     - go mod tidy
@@ -58,13 +60,18 @@ release:
 # Deprecated in GoReleaser, but the only way to produce a Linux-installable formula, so
 # kept for the cross-platform CLI.
 brews:
-  - repository:
+  - name: rubix
+    repository:
       owner: danielriddell21
       name: homebrew-tap
       branch: trunk
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     ids: [headless]
     directory: Formula
+    homepage: https://github.com/danielriddell21/rubix
+    description: "A Rubik's cube solver with nine strategies and a 3D visualizer"
+    license: MIT
+    commit_msg_template: "Brew formula update for rubix {{ .Tag }}"
     install: |
       bin.install "rubix"
     test: |
@@ -72,10 +79,14 @@ brews:
 
 # macOS-only GUI cask.
 homebrew_casks:
-  - repository:
+  - name: rubix
+    repository:
       owner: danielriddell21
       name: homebrew-tap
       branch: trunk
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     ids: [gui]
+    homepage: https://github.com/danielriddell21/rubix
+    description: "A Rubik's cube solver with a native macOS 3D visualizer"
+    license: MIT
     caveats: "The rubix visualizer opens a window and is macOS-only."
