@@ -236,20 +236,6 @@ func guiController(initial *cube.Cube, start int, seed int64) gui.Controller {
 	}
 }
 
-// gridController wires the visualizer to a grid of cubes, one cell per replica job,
-// reusing the single-cube controller's strategy list and solve function.
-func gridController(jobs []replicaJob) gui.Controller {
-	ctrl := guiController(nil, 0, 0)
-	for _, j := range jobs {
-		ctrl.Cells = append(ctrl.Cells, gui.Cell{
-			Strategy: j.strategy,
-			Initial:  j.scramble,
-			Label:    fmt.Sprintf("#%d %s", j.index, j.strategy),
-		})
-	}
-	return ctrl
-}
-
 // strategyIndex returns the registry index of a solver name (0 if unknown).
 func strategyIndex(name string) int {
 	for i, n := range solver.Names() {

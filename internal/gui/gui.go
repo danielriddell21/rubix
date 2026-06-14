@@ -341,8 +341,22 @@ func (v *cubeView) inTurnLayer(p poly) bool {
 	}
 }
 
+// viewMode is the visualizer layout: one self-driving cube, a compare grid (one scramble
+// across every solver) or a replica grid (several independent scrambles on one solver).
+type viewMode int
+
+const (
+	modeSingle viewMode = iota
+	modeCompare
+	modeReplica
+
+	replicaCount = 4 // cubes shown in replica mode (a tidy 2×2)
+)
+
 // gameState owns the shared camera, geometry and the set of cube views.
 type gameState struct {
+	ctrl       Controller
+	mode       viewMode
 	views      []*cubeView
 	cols, rows int
 	w, h       int
@@ -373,6 +387,60 @@ type gameState struct {
 }
 
 func (g *gameState) grid() bool { return len(g.views) > 1 }
+
+// defaultStrategy is the solver the single and replica views run.
+func (g *gameState) defaultStrategy() string {
+	if g.ctrl.Start >= 0 && g.ctrl.Start < len(g.ctrl.Strategies) {
+		return g.ctrl.Strategies[g.ctrl.Start]
+	}
+	if len(g.ctrl.Strategies) > 0 {
+		return g.ctrl.Strategies[0]
+	}
+	return ""
+}
+
+// buildViews constructs the cube views for a layout, always with fresh scrambles. Compare
+// shares one scramble across every solver; replica gives each cube its own scramble solved
+// by the default strategy; single is one self-driving cube.
+func (g *gameState) buildViews(m viewMode) []*cubeView {
+	switch m {
+	case modeCompare:
+		scramble := g.ctrl.Scramble()
+		var vs []*cubeView
+		for i, name := range g.ctrl.Strategies {
+			if i >= maxCells {
+				break
+			}
+			vs = append(vs, newGridView(g.ctrl, Cell{Strategy: name, Initial: scramble, Label: fmt.Sprintf("#%d %s", i, name)}))
+		}
+		return vs
+	case modeReplica:
+		name := g.defaultStrategy()
+		vs := make([]*cubeView, 0, replicaCount)
+		for i := 0; i < replicaCount; i++ {
+			vs = append(vs, newGridView(g.ctrl, Cell{Strategy: name, Initial: g.ctrl.Scramble(), Label: fmt.Sprintf("#%d %s", i, name)}))
+		}
+		return vs
+	default:
+		return []*cubeView{newGridView(g.ctrl, Cell{Strategy: g.defaultStrategy(), Initial: g.ctrl.Scramble()})}
+	}
+}
+
+// setMode switches the layout, rebuilds the views and starts their solves. The window is
+// resized to fit the new grid (kept fixed while recording so the GIF frame size is stable).
+func (g *gameState) setMode(m viewMode) {
+	g.mode = m
+	g.views = g.buildViews(m)
+	g.cols, g.rows = gridDims(len(g.views))
+	g.focus = 0
+	if g.rec == nil {
+		g.w, g.h = windowSize(g.cols, g.rows)
+		ebiten.SetWindowSize(g.w, g.h)
+	}
+	for _, v := range g.views {
+		v.kickSolve()
+	}
+}
 
 // frameRange is an inclusive interval of frame indices during which a key is held.
 type frameRange struct{ lo, hi int }
@@ -419,37 +487,58 @@ func (g *gameState) keyTapped(k ebiten.Key) bool {
 	return inpututil.IsKeyJustPressed(k) || g.script.justPressed(k, g.frame)
 }
 
-// buildScript turns a comma-separated keybind list (e.g. "space", "left", "shift+up",
-// "tab") into a timeline over recFrames frames. Toggle keys are tapped twice (on, then
-// off) so the GIF shows both states; one-shot actions tap once; orbit/zoom keys are held
-// for the whole clip. It returns nil when no keys are given.
+// buildScript turns a comma-separated keybind list (e.g. "space", "left", "replica,tab")
+// into a timeline over recFrames frames. Tap actions fire in order, each in its own slot,
+// so multi-key demos work (e.g. switch to the replica grid, then cycle focus). A lone
+// toggle (space/x/m) is tapped twice — on, then off — to show both states. Orbit/zoom
+// keys are held for the whole clip. It returns nil when no keys are given.
 func buildScript(keys string, recFrames int) *keyScript {
-	const intro = 12 // brief pause so the opening state is visible before acting
-	s := &keyScript{taps: map[ebiten.Key][]int{}, holds: map[ebiten.Key][]frameRange{}}
-	tapToggle := func(k ebiten.Key) { s.taps[k] = append(s.taps[k], intro, recFrames/2) }
-	tapOnce := func(k ebiten.Key) { s.taps[k] = append(s.taps[k], intro) }
-	hold := func(k ebiten.Key) { s.holds[k] = append(s.holds[k], frameRange{intro, recFrames}) }
-
-	any := false
+	const (
+		intro = 12 // brief pause so the opening state is visible before acting
+		gap   = 18 // frames between successive tap actions
+	)
+	var toks []string
 	for _, raw := range strings.Split(keys, ",") {
-		tok := strings.ToLower(strings.TrimSpace(raw))
-		if tok == "" {
-			continue
+		if tok := strings.ToLower(strings.TrimSpace(raw)); tok != "" {
+			toks = append(toks, tok)
 		}
-		any = true
+	}
+	if len(toks) == 0 {
+		return nil
+	}
+
+	s := &keyScript{taps: map[ebiten.Key][]int{}, holds: map[ebiten.Key][]frameRange{}}
+	lone := len(toks) == 1
+	tap := func(k ebiten.Key, at int) { s.taps[k] = append(s.taps[k], at) }
+	hold := func(k ebiten.Key) { s.holds[k] = append(s.holds[k], frameRange{intro, recFrames}) }
+	toggle := func(k ebiten.Key, at int) {
+		tap(k, at)
+		if lone {
+			tap(k, recFrames/2) // show the off state for a single-toggle demo
+		}
+	}
+
+	slot := intro
+	for _, tok := range toks {
 		switch tok {
 		case "space":
-			tapToggle(ebiten.KeySpace)
+			toggle(ebiten.KeySpace, slot)
 		case "x":
-			tapToggle(ebiten.KeyX)
+			toggle(ebiten.KeyX, slot)
 		case "m":
-			tapToggle(ebiten.KeyM)
+			toggle(ebiten.KeyM, slot)
 		case "r":
-			tapOnce(ebiten.KeyR)
+			tap(ebiten.KeyR, slot)
 		case "s":
-			tapOnce(ebiten.KeyS)
+			tap(ebiten.KeyS, slot)
 		case "tab":
-			tapOnce(ebiten.KeyTab)
+			tap(ebiten.KeyTab, slot)
+		case "1", "single":
+			tap(ebiten.KeyDigit1, slot)
+		case "2", "compare":
+			tap(ebiten.KeyDigit2, slot)
+		case "3", "replica":
+			tap(ebiten.KeyDigit3, slot)
 		case "left":
 			hold(ebiten.KeyArrowLeft)
 		case "right":
@@ -465,9 +554,7 @@ func buildScript(keys string, recFrames int) *keyScript {
 			hold(ebiten.KeyShiftLeft)
 			hold(ebiten.KeyArrowDown)
 		}
-	}
-	if !any {
-		return nil
+		slot += gap
 	}
 	return s
 }
@@ -570,6 +657,17 @@ func (g *gameState) Update() error {
 	if g.keyTapped(ebiten.KeyM) {
 		g.showMoves = !g.showMoves
 	}
+	// Layout: 1 single cube, 2 compare grid (all solvers, one scramble), 3 replica grid.
+	// Re-pressing the current mode regenerates it with fresh scrambles.
+	if g.keyTapped(ebiten.KeyDigit1) {
+		g.setMode(modeSingle)
+	}
+	if g.keyTapped(ebiten.KeyDigit2) {
+		g.setMode(modeCompare)
+	}
+	if g.keyTapped(ebiten.KeyDigit3) {
+		g.setMode(modeReplica)
+	}
 
 	for _, v := range g.views {
 		v.advanceSolve(g.unfold)
@@ -604,7 +702,7 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 	if !g.grid() {
 		ebitenutil.DebugPrintAt(screen, fv.status(), 12, 12)
 	}
-	help := "drag/arrows: orbit   wheel: zoom   space: unfold   x: x-ray   r: scramble   s: solver   m: moves"
+	help := "drag/arrows: orbit   wheel: zoom   space: unfold   x: x-ray   r: scramble   s: solver   m: moves   1/2/3: single/compare/replica"
 	if g.grid() {
 		help += "   tab: focus"
 	}
@@ -858,24 +956,16 @@ func newGridView(ctrl Controller, cell Cell) *cubeView {
 	}
 }
 
-// Play opens the visualizer driven by ctrl: a single self-driving cube, or — when
-// ctrl.Cells is set — a grid of independent cubes (replica mode).
+// Play opens the visualizer driven by ctrl. It starts as a single self-driving cube;
+// the 2 and 3 keys switch to the compare and replica grids at runtime.
 func Play(ctrl Controller) error {
 	g := &gameState{
+		ctrl:  ctrl,
+		mode:  modeSingle,
 		polys: buildPolys(),
 		yaw:   0.6, pitch: 0.5, zoom: 1,
 	}
-	if len(ctrl.Cells) == 0 {
-		g.views = []*cubeView{newSingleView(ctrl)}
-	} else {
-		cells := ctrl.Cells
-		if len(cells) > maxCells {
-			cells = cells[:maxCells]
-		}
-		for _, cell := range cells {
-			g.views = append(g.views, newGridView(ctrl, cell))
-		}
-	}
+	g.views = []*cubeView{newSingleView(ctrl)}
 	g.cols, g.rows = gridDims(len(g.views))
 	g.w, g.h = windowSize(g.cols, g.rows)
 	if ctrl.Record != "" {

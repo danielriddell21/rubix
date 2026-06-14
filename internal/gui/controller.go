@@ -16,10 +16,6 @@ type Controller struct {
 	// the attempt and show it getting stuck (faithful to the videos).
 	Solve func(strategy string, c cube.Cube) (moves []cube.Move, solved bool)
 
-	// Cells, when non-empty, drives a grid of independent cubes (replica mode) instead
-	// of the single self-driving cube. Each cell carries its own scramble and strategy.
-	Cells []Cell
-
 	// Recording: when Record is non-empty the visualizer captures RecordFrames frames to
 	// the GIF at Record (each downscaled by RecordScale, played back at RecordFPS),
 	// optionally scripting the keybinds named in RecordKeys, then exits. These are

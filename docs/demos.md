@@ -44,7 +44,10 @@ Zooms in and out (the scroll wheel does the same).
 
 ![zoom](demos/zoom.gif)
 
-## `tab` — focus next cube
-In the replica grid (`replica -count N -view`), moves the highlight to the next cube.
+## `1` / `2` / `3` — switch layout, `tab` — focus next cube
+`1` is the single self-driving cube, `2` is the compare grid (one scramble across every
+solver), and `3` is the replica grid (several independent scrambles). In a grid, `tab`
+moves the highlight to the next cube. The clip below presses `3` then cycles focus with
+`tab`.
 
 ![focus](demos/focus.gif)

@@ -11,7 +11,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/danielriddell21/rubix/internal/gui"
 	"github.com/danielriddell21/rubix/internal/solver"
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
@@ -43,8 +42,6 @@ func cmdReplica(args []string, compareDefault bool) error {
 	compare := fs.Bool("compare", compareDefault, "solve each scramble with every solver")
 	seed := fs.Int64("seed", 0, "base seed; cube i uses seed+i (0 = random each run)")
 	n := fs.Int("n", 25, "scramble length (moves)")
-	view := fs.Bool("view", false, "open the visualizer grid instead of printing a table (needs -tags ebiten)")
-	rec := addRecordFlags(fs)
 	format, output := addFormatFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -73,10 +70,6 @@ func cmdReplica(args []string, compareDefault bool) error {
 		for _, name := range names {
 			jobs = append(jobs, replicaJob{index: i, seed: s, strategy: name, scramble: scr})
 		}
-	}
-
-	if *view {
-		return gui.Play(rec.apply(gridController(jobs)))
 	}
 
 	if err := warmTables(); err != nil {

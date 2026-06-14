@@ -50,6 +50,8 @@ go run -tags ebiten ./cmd/rubix view
 | `x` | x-ray (see all sides) |
 | `r` | new scramble |
 | `s` | switch solver |
+| `1` / `2` / `3` | single cube / compare grid (all solvers, one scramble) / replica grid |
+| `tab` | focus the next cube (in a grid) |
 
 See [docs/demos.md](docs/demos.md) for an animated GIF of each keybind.
 
