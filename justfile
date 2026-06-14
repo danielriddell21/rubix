@@ -55,4 +55,4 @@ demos:
     go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/move-list.gif    --record-keys m
     go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/orbit.gif        --record-keys left
     go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/zoom.gif         --record-keys shift+up
-    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/focus.gif        --record-keys replica,tab,tab,tab
+    go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/compare.gif      --record-keys plus,plus,plus,tab,tab,tab

@@ -44,10 +44,10 @@ Zooms in and out (the scroll wheel does the same).
 
 ![zoom](demos/zoom.gif)
 
-## `1` / `2` / `3` — switch layout, `tab` — focus next cube
-`1` is the single self-driving cube, `2` is the compare grid (one scramble across every
-solver), and `3` is the replica grid (several independent scrambles). In a grid, `tab`
-moves the highlight to the next cube. The clip below presses `3` then cycles focus with
-`tab`.
+## `+` / `-` — add/remove cubes, `tab` — focus next cube
+The cube count is the layout: one cube is the single self-driving view; pressing `+` adds
+cubes to make a compare grid (each with its own scramble, all on the default solver until
+you change one with `s`), and `-` removes them. `tab` moves the highlight between cubes. The
+clip below presses `+` a few times, then cycles focus with `tab`.
 
-![focus](demos/focus.gif)
+![compare](demos/compare.gif)

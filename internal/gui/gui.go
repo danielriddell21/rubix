@@ -191,22 +191,11 @@ func (v *cubeView) shortStatus() string {
 	}
 }
 
-// viewMode is the visualizer layout: one self-driving cube, a compare grid (one scramble
-// across every solver) or a replica grid (several independent scrambles on one solver).
-type viewMode int
-
-const (
-	modeSingle viewMode = iota
-	modeCompare
-	modeReplica
-
-	replicaCount = 4 // cubes shown in replica mode (a tidy 2×2)
-)
-
-// gameState owns the shared camera, geometry and the set of cube views.
+// gameState owns the shared camera, geometry and the set of cube views. The number of
+// cubes is the layout: one cube is the single self-driving view, two or more is the compare
+// grid. The "+" and "-" keys change the count (and so move between the two).
 type gameState struct {
 	ctrl       Controller
-	mode       viewMode
 	views      []*cubeView
 	cols, rows int
 	w, h       int
@@ -238,7 +227,7 @@ type gameState struct {
 
 func (g *gameState) grid() bool { return len(g.views) > 1 }
 
-// defaultStrategy is the solver the single and replica views run.
+// defaultStrategy is the solver a freshly built cube runs.
 func (g *gameState) defaultStrategy() string {
 	if g.ctrl.Start >= 0 && g.ctrl.Start < len(g.ctrl.Strategies) {
 		return g.ctrl.Strategies[g.ctrl.Start]
@@ -249,48 +238,61 @@ func (g *gameState) defaultStrategy() string {
 	return ""
 }
 
-// buildViews constructs the cube views for a layout, always with fresh scrambles. Compare
-// shares one scramble across every solver; replica gives each cube its own scramble solved
-// by the default strategy; single is one self-driving cube.
-func (g *gameState) buildViews(m viewMode) []*cubeView {
-	switch m {
-	case modeCompare:
-		scramble := g.ctrl.Scramble()
-		var vs []*cubeView
-		for i, name := range g.ctrl.Strategies {
-			if i >= maxCells {
-				break
-			}
-			vs = append(vs, newGridView(g.ctrl, Cell{Strategy: name, Initial: scramble, Label: fmt.Sprintf("#%d %s", i, name)}))
-		}
-		return vs
-	case modeReplica:
-		name := g.defaultStrategy()
-		vs := make([]*cubeView, 0, replicaCount)
-		for i := 0; i < replicaCount; i++ {
-			vs = append(vs, newGridView(g.ctrl, Cell{Strategy: name, Initial: g.ctrl.Scramble(), Label: fmt.Sprintf("#%d %s", i, name)}))
-		}
-		return vs
-	default:
-		return []*cubeView{newGridView(g.ctrl, Cell{Strategy: g.defaultStrategy(), Initial: g.ctrl.Scramble()})}
+// newCube builds one grid cube with a fresh scramble on the default solver. Index i only
+// labels the cell; change a cube's solver in-place with the "s" key.
+func (g *gameState) newCube(i int) *cubeView {
+	name := g.defaultStrategy()
+	return newGridView(g.ctrl, Cell{Strategy: name, Initial: g.ctrl.Scramble(), Label: fmt.Sprintf("#%d %s", i, name)})
+}
+
+// relayout recomputes the grid dimensions for the current views and, when not recording,
+// resizes the window to fit (capped to the monitor). The recording size stays fixed so GIF
+// frames keep constant dimensions.
+func (g *gameState) relayout() {
+	g.cols, g.rows = gridDims(len(g.views))
+	if g.focus >= len(g.views) {
+		g.focus = len(g.views) - 1
+	}
+	if g.rec == nil {
+		g.w, g.h = fitMonitor(windowSize(g.cols, g.rows))
+		ebiten.SetWindowSize(g.w, g.h)
 	}
 }
 
-// setMode switches the layout, rebuilds the views and starts their solves. The window is
-// resized to fit the new grid (kept fixed while recording so the GIF frame size is stable).
-func (g *gameState) setMode(m viewMode) {
-	g.mode = m
-	g.views = g.buildViews(m)
-	g.cols, g.rows = gridDims(len(g.views))
-	g.focus = 0
-	if g.rec == nil {
-		g.w, g.h = windowSize(g.cols, g.rows)
-		ebiten.SetWindowSize(g.w, g.h)
+// setCount changes how many cubes are shown (clamped to [1, maxCells]). One cube is the
+// single self-driving view; two or more is the compare grid. Growing within the grid keeps
+// the cubes already on screen and only kicks off the new ones; crossing the 1↔many boundary
+// rebuilds. Each new cube gets its own scramble on the default solver.
+func (g *gameState) setCount(n int) {
+	n = clampInt(n, 1, maxCells)
+	if n == len(g.views) {
+		return
 	}
-	for _, v := range g.views {
+	switch {
+	case n == 1:
+		v := newSingleView(g.ctrl)
+		g.views = []*cubeView{v}
 		v.kickSolve()
+	case len(g.views) >= 2 && n > len(g.views): // grow the grid, keep existing cubes
+		for i := len(g.views); i < n; i++ {
+			v := g.newCube(i)
+			g.views = append(g.views, v)
+			v.kickSolve()
+		}
+	case len(g.views) >= 2: // shrink the grid
+		g.views = g.views[:n]
+	default: // single → grid: build a fresh set
+		g.views = make([]*cubeView, 0, n)
+		for i := range n {
+			v := g.newCube(i)
+			g.views = append(g.views, v)
+			v.kickSolve()
+		}
 	}
+	g.relayout()
 }
+
+func clampInt(v, lo, hi int) int { return max(lo, min(v, hi)) }
 
 // frameRange is an inclusive interval of frame indices during which a key is held.
 type frameRange struct{ lo, hi int }
@@ -383,12 +385,10 @@ func buildScript(keys string, recFrames int) *keyScript {
 			tap(ebiten.KeyS, slot)
 		case "tab":
 			tap(ebiten.KeyTab, slot)
-		case "1", "single":
-			tap(ebiten.KeyDigit1, slot)
-		case "2", "compare":
-			tap(ebiten.KeyDigit2, slot)
-		case "3", "replica":
-			tap(ebiten.KeyDigit3, slot)
+		case "+", "plus":
+			tap(ebiten.KeyEqual, slot)
+		case "-", "minus":
+			tap(ebiten.KeyMinus, slot)
 		case "left":
 			hold(ebiten.KeyArrowLeft)
 		case "right":
@@ -507,16 +507,13 @@ func (g *gameState) Update() error {
 	if g.keyTapped(ebiten.KeyM) {
 		g.showMoves = !g.showMoves
 	}
-	// Layout: 1 single cube, 2 compare grid (all solvers, one scramble), 3 replica grid.
-	// Re-pressing the current mode regenerates it with fresh scrambles.
-	if g.keyTapped(ebiten.KeyDigit1) {
-		g.setMode(modeSingle)
+	// Layout by count: "+" adds a cube (one cube → the compare grid → more cubes), "-"
+	// removes one (back down to the single self-driving cube). "s" changes a cube's solver.
+	if g.keyTapped(ebiten.KeyEqual) || g.keyTapped(ebiten.KeyKPAdd) {
+		g.setCount(len(g.views) + 1)
 	}
-	if g.keyTapped(ebiten.KeyDigit2) {
-		g.setMode(modeCompare)
-	}
-	if g.keyTapped(ebiten.KeyDigit3) {
-		g.setMode(modeReplica)
+	if g.keyTapped(ebiten.KeyMinus) || g.keyTapped(ebiten.KeyKPSubtract) {
+		g.setCount(len(g.views) - 1)
 	}
 
 	for _, v := range g.views {
@@ -552,11 +549,19 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 	if !g.grid() {
 		ebitenutil.DebugPrintAt(screen, fv.status(), 12, 12)
 	}
-	help := "drag/arrows: orbit   wheel: zoom   space: unfold   x: x-ray   r: scramble   s: solver   m: moves   1/2/3: single/compare/replica"
-	if g.grid() {
-		help += "   tab: focus"
+	segments := []string{
+		"drag/arrows: orbit", "wheel: zoom", "space: unfold", "x: x-ray",
+		"r: scramble", "s: solver", "m: moves", "+/-: cubes",
 	}
-	ebitenutil.DebugPrintAt(screen, help, 12, g.h-22)
+	if g.grid() {
+		segments = append(segments, "tab: focus")
+	}
+	// Wrap to the window width and stack the lines up from the bottom so nothing clips.
+	lines := wrapHelp(segments, g.w-24)
+	const helpLineH = 16
+	for i, line := range lines {
+		ebitenutil.DebugPrintAt(screen, line, 12, g.h-(len(lines)-i)*helpLineH-4)
+	}
 
 	if g.showMoves {
 		g.drawMoveList(screen, fv)
@@ -662,7 +667,62 @@ func (g *gameState) drawMoveList(screen *ebiten.Image, v *cubeView) {
 	}
 }
 
-func (g *gameState) Layout(int, int) (int, int) { return g.w, g.h }
+// Layout follows the window so the user can resize it and the scene reflows. While
+// recording it returns a fixed size so every captured GIF frame has the same dimensions.
+func (g *gameState) Layout(outsideW, outsideH int) (int, int) {
+	if g.rec == nil && outsideW > 0 && outsideH > 0 {
+		g.w, g.h = outsideW, outsideH
+	}
+	return g.w, g.h
+}
+
+// fitMonitor shrinks a window size to fit within 90% of the primary monitor, preserving
+// aspect ratio, so a large grid never opens bigger than the screen. It is a no-op when the
+// monitor size is unknown or the window already fits.
+func fitMonitor(w, h int) (int, int) {
+	mw, mh := ebiten.Monitor().Size()
+	if mw <= 0 || mh <= 0 {
+		return w, h
+	}
+	maxW, maxH := mw*9/10, mh*9/10
+	s := 1.0
+	if w > maxW {
+		s = math.Min(s, float64(maxW)/float64(w))
+	}
+	if h > maxH {
+		s = math.Min(s, float64(maxH)/float64(h))
+	}
+	if s < 1 {
+		w, h = int(float64(w)*s), int(float64(h)*s)
+	}
+	return w, h
+}
+
+// wrapHelp packs help segments into lines no wider than maxWidth pixels (the debug font is
+// a fixed 6px per glyph), joining segments on a line with three spaces. A segment wider
+// than maxWidth on its own is left on its own line.
+func wrapHelp(segs []string, maxWidth int) []string {
+	const glyph = 6
+	const sep = "   "
+	var lines []string
+	cur := ""
+	for _, s := range segs {
+		cand := s
+		if cur != "" {
+			cand = cur + sep + s
+		}
+		if cur != "" && len(cand)*glyph > maxWidth {
+			lines = append(lines, cur)
+			cur = s
+		} else {
+			cur = cand
+		}
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return lines
+}
 
 func fillQuad(screen *ebiten.Image, q [4][2]float32, col color.RGBA) {
 	var path vector.Path
@@ -755,7 +815,6 @@ func newGridView(ctrl Controller, cell Cell) *cubeView {
 func Play(ctrl Controller) error {
 	g := &gameState{
 		ctrl:  ctrl,
-		mode:  modeSingle,
 		polys: render.BuildPolys(),
 		yaw:   0.6, pitch: 0.5, zoom: 1,
 	}
@@ -776,5 +835,9 @@ func Play(ctrl Controller) error {
 	}
 	ebiten.SetWindowSize(g.w, g.h)
 	ebiten.SetWindowTitle("rubix")
+	if g.rec == nil {
+		// Let the user resize the window; Layout reflows the scene to the new size.
+		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	}
 	return ebiten.RunGame(g)
 }

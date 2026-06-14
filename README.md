@@ -49,9 +49,9 @@ go run -tags ebiten ./cmd/rubix view
 | `space` | unfold to a flat net |
 | `x` | x-ray (see all sides) |
 | `r` | new scramble |
-| `s` | switch solver |
-| `1` / `2` / `3` | single cube / compare grid (all solvers, one scramble) / replica grid |
-| `tab` | focus the next cube (in a grid) |
+| `s` | switch solver (the focused cube) |
+| `+` / `-` | add / remove a cube — one cube is the single view, more is a compare grid |
+| `tab` | focus the next cube (in the grid) |
 
 See [docs/demos.md](docs/demos.md) for an animated GIF of each keybind.
 
