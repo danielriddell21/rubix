@@ -21,6 +21,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/danielriddell21/rubix/pkg/cube"
+	"github.com/danielriddell21/rubix/pkg/render"
 )
 
 const (
@@ -32,22 +33,11 @@ const (
 	orbitSpeed  = 0.035
 	zoomSpeed   = 0.04
 	unfoldSpeed = 0.04
-	tileInset   = 0.12 // gap around each tile (plastic shows through)
-	tileRaise   = 0.16 // how far each coloured tile stands proud of the body
 
 	cellSize = 320  // target pixels per grid cell
 	maxWin   = 1280 // largest window edge in replica grid mode
 	maxCells = 16   // cap on cubes drawn in the grid (the CLI table handles more)
 )
-
-var palette = [6]color.RGBA{
-	cube.ColU: {245, 245, 245, 255}, // white
-	cube.ColR: {210, 40, 40, 255},   // red
-	cube.ColF: {40, 185, 75, 255},   // green
-	cube.ColD: {245, 215, 50, 255},  // yellow
-	cube.ColL: {245, 150, 35, 255},  // orange
-	cube.ColB: {45, 105, 225, 255},  // blue
-}
 
 var (
 	plastic    = color.RGBA{34, 34, 40, 255}
@@ -69,109 +59,6 @@ func init() {
 
 // Available reports whether the visualizer is compiled in.
 func Available() bool { return true }
-
-type vec3 struct{ x, y, z float32 }
-
-func (a vec3) add(b vec3) vec3      { return vec3{a.x + b.x, a.y + b.y, a.z + b.z} }
-func (a vec3) sub(b vec3) vec3      { return vec3{a.x - b.x, a.y - b.y, a.z - b.z} }
-func (a vec3) scale(s float32) vec3 { return vec3{a.x * s, a.y * s, a.z * s} }
-func lerp(a, b vec3, t float32) vec3 {
-	return vec3{a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t, a.z + (b.z-a.z)*t}
-}
-
-type pkind int
-
-const (
-	kBody pkind = iota // dark plastic cell base
-	kTop               // coloured sticker top (gets the live facelet colour)
-	kSide              // plastic bevel wall of a raised tile
-)
-
-// poly is one drawable quad, with matching corners on the solid cube and in the flat
-// net so it can morph between them. tops carry a face/cell for their live colour.
-type poly struct {
-	cube, net [4]vec3
-	normal    vec3
-	center    vec3 // cube-space centre, for turn-layer membership
-	kind      pkind
-	face      cube.Color
-	cell      int
-}
-
-type basis struct{ origin, u, v, n vec3 }
-
-type shape struct {
-	pts  [4]vec3
-	kind pkind
-}
-
-// cellShapes builds the six quads of one raised tile: a plastic base filling the cell,
-// a coloured top inset and raised along the normal, and four plastic bevel walls.
-func cellShapes(b basis, c, r int) [6]shape {
-	A := b.origin.add(b.u.scale(float32(c))).add(b.v.scale(float32(r)))
-	B := A.add(b.u)
-	C := B.add(b.v)
-	D := A.add(b.v)
-	iA := A.add(b.u.scale(tileInset)).add(b.v.scale(tileInset))
-	iB := B.sub(b.u.scale(tileInset)).add(b.v.scale(tileInset))
-	iC := C.sub(b.u.scale(tileInset)).sub(b.v.scale(tileInset))
-	iD := D.add(b.u.scale(tileInset)).sub(b.v.scale(tileInset))
-	hn := b.n.scale(tileRaise)
-	tA, tB, tC, tD := iA.add(hn), iB.add(hn), iC.add(hn), iD.add(hn)
-	return [6]shape{
-		{[4]vec3{A, B, C, D}, kBody},
-		{[4]vec3{tA, tB, tC, tD}, kTop},
-		{[4]vec3{iA, iB, tB, tA}, kSide},
-		{[4]vec3{iB, iC, tC, tB}, kSide},
-		{[4]vec3{iC, iD, tD, tC}, kSide},
-		{[4]vec3{iD, iA, tA, tD}, kSide},
-	}
-}
-
-// buildPolys generates every drawable quad once: each face's nine raised tiles, in
-// both the solid-cube layout and the flat unfolded-net layout.
-func buildPolys() []poly {
-	cubeB := [6]basis{
-		cube.ColU: {vec3{-1.5, 1.5, -1.5}, vec3{1, 0, 0}, vec3{0, 0, 1}, vec3{0, 1, 0}},
-		cube.ColR: {vec3{1.5, 1.5, 1.5}, vec3{0, 0, -1}, vec3{0, -1, 0}, vec3{1, 0, 0}},
-		cube.ColF: {vec3{-1.5, 1.5, 1.5}, vec3{1, 0, 0}, vec3{0, -1, 0}, vec3{0, 0, 1}},
-		cube.ColD: {vec3{-1.5, -1.5, 1.5}, vec3{1, 0, 0}, vec3{0, 0, -1}, vec3{0, -1, 0}},
-		cube.ColL: {vec3{-1.5, 1.5, -1.5}, vec3{0, 0, 1}, vec3{0, -1, 0}, vec3{-1, 0, 0}},
-		cube.ColB: {vec3{1.5, 1.5, -1.5}, vec3{-1, 0, 0}, vec3{0, -1, 0}, vec3{0, 0, -1}},
-	}
-	netTL := [6]vec3{
-		cube.ColU: {-1.5, 4.5, 0},
-		cube.ColR: {1.5, 1.5, 0},
-		cube.ColF: {-1.5, 1.5, 0},
-		cube.ColD: {-1.5, -1.5, 0},
-		cube.ColL: {-4.5, 1.5, 0},
-		cube.ColB: {4.5, 1.5, 0},
-	}
-	netCentre := vec3{1.5, 1.5, 0}
-	nu, nv, nn := vec3{1, 0, 0}, vec3{0, -1, 0}, vec3{0, 0, 1}
-
-	var out []poly
-	for face := range 6 {
-		f := cube.Color(face)
-		cb := cubeB[f]
-		nb := basis{origin: netTL[f].sub(netCentre), u: nu, v: nv, n: nn}
-		for r := range 3 {
-			for c := range 3 {
-				cs := cellShapes(cb, c, r)
-				ns := cellShapes(nb, c, r)
-				for i := range cs {
-					ctr := cs[i].pts[0].add(cs[i].pts[1]).add(cs[i].pts[2]).add(cs[i].pts[3]).scale(0.25)
-					out = append(out, poly{
-						cube: cs[i].pts, net: ns[i].pts,
-						normal: quadNormal(cs[i].pts), center: ctr,
-						kind: cs[i].kind, face: f, cell: r*3 + c,
-					})
-				}
-			}
-		}
-	}
-	return out
-}
 
 type solveOut struct {
 	gen    int
@@ -304,43 +191,6 @@ func (v *cubeView) shortStatus() string {
 	}
 }
 
-// turnAngle returns the axis (0=x,1=y,2=z) and current signed angle of the active turn.
-// Clockwise (viewed from outside the face) is a negative rotation about the outward axis.
-func (v *cubeView) turnAngle() (int, float32) {
-	if !v.turning {
-		return 1, 0
-	}
-	var target float32
-	switch v.turnMove % 3 {
-	case 0:
-		target = -math.Pi / 2 // CW quarter
-	case 1:
-		target = math.Pi // half turn
-	default:
-		target = math.Pi / 2 // CCW quarter
-	}
-	axis, sign := faceAxis(v.turnMove.Face())
-	t := easeInOut(float32(v.turnFrame) / turnFrames)
-	return axis, float32(sign) * target * t
-}
-
-func (v *cubeView) inTurnLayer(p poly) bool {
-	switch v.turnMove.Face() {
-	case 0:
-		return p.center.y > 0.5
-	case 3:
-		return p.center.y < -0.5
-	case 1:
-		return p.center.x > 0.5
-	case 4:
-		return p.center.x < -0.5
-	case 2:
-		return p.center.z > 0.5
-	default:
-		return p.center.z < -0.5
-	}
-}
-
 // viewMode is the visualizer layout: one self-driving cube, a compare grid (one scramble
 // across every solver) or a replica grid (several independent scrambles on one solver).
 type viewMode int
@@ -361,7 +211,7 @@ type gameState struct {
 	cols, rows int
 	w, h       int
 
-	polys []poly
+	polys []render.Poly
 
 	yaw, pitch float32
 	zoom       float32
@@ -726,11 +576,11 @@ func (g *gameState) drawView(screen *ebiten.Image, v *cubeView, cx, cy, px float
 	f := v.c.ToFacelets()
 	sinY, cosY := fsincos(g.yaw)
 	sinX, cosX := fsincos(g.pitch)
-	key := normalize(vec3{0.5, 0.8, 0.9})
-	fill := normalize(vec3{-0.5, 0.3, 0.4})
+	key := render.Normalize(render.Vec3{X: 0.5, Y: 0.8, Z: 0.9})
+	fill := render.Normalize(render.Vec3{X: -0.5, Y: 0.3, Z: 0.4})
 
 	// Current animated turn angle, applied to the moving layer.
-	turnAxis, turnAng := v.turnAngle()
+	turnAxis, turnAng := render.TurnAngle(v.turnMove, float32(v.turnFrame)/turnFrames)
 	tsin, tcos := fsincos(turnAng)
 
 	type face2d struct {
@@ -741,36 +591,36 @@ func (g *gameState) drawView(screen *ebiten.Image, v *cubeView, cx, cy, px float
 	}
 	faces := make([]face2d, 0, len(g.polys))
 	for _, p := range g.polys {
-		if g.xray && p.kind != kTop {
+		if g.xray && p.Kind != render.Top {
 			continue // x-ray: drop the plastic body so every side shows through
 		}
-		spin := v.turning && v.inTurnLayer(p)
+		spin := v.turning && render.InTurnLayer(v.turnMove, p.Center)
 		var pts [4][2]float32
 		var depth float32
 		for i := range 4 {
-			pv := lerp(p.cube[i], p.net[i], g.unfold)
+			pv := render.Lerp(p.Cube[i], p.Net[i], g.unfold)
 			if spin {
-				pv = rotateAxis(pv, turnAxis, tsin, tcos)
+				pv = render.RotateAxis(pv, turnAxis, tsin, tcos)
 			}
-			pv = rotate(pv, sinY, cosY, sinX, cosX)
-			pts[i] = [2]float32{cx + pv.x*px, cy - pv.y*px}
-			depth += pv.z
+			pv = render.RotateCamera(pv, sinY, cosY, sinX, cosX)
+			pts[i] = [2]float32{cx + pv.X*px, cy - pv.Y*px}
+			depth += pv.Z
 		}
-		n := p.normal
+		n := p.Normal
 		if spin {
-			n = rotateAxis(n, turnAxis, tsin, tcos)
+			n = render.RotateAxis(n, turnAxis, tsin, tcos)
 		}
-		n = rotate(n, sinY, cosY, sinX, cosX)
-		lit := min(1, 0.6+0.32*max(0, dot(n, key))+0.18*max(0, dot(n, fill)))
+		n = render.RotateCamera(n, sinY, cosY, sinX, cosX)
+		lit := min(1, 0.6+0.32*max(0, render.Dot(n, key))+0.18*max(0, render.Dot(n, fill)))
 		base := plastic
-		if p.kind == kTop {
-			base = palette[f[int(p.face)*9+p.cell]]
+		if p.Kind == render.Top {
+			base = render.FaceletColor(f[int(p.Face)*9+p.Cell])
 		}
 		col := shade(base, lit)
 		if g.xray {
 			col.A = 125
 		}
-		faces = append(faces, face2d{pts: pts, depth: depth / 4, col: col, stroke: p.kind == kTop && !g.xray})
+		faces = append(faces, face2d{pts: pts, depth: depth / 4, col: col, stroke: p.Kind == render.Top && !g.xray})
 	}
 	sort.Slice(faces, func(i, j int) bool { return faces[i].depth < faces[j].depth })
 	for _, fc := range faces {
@@ -814,54 +664,6 @@ func (g *gameState) drawMoveList(screen *ebiten.Image, v *cubeView) {
 
 func (g *gameState) Layout(int, int) (int, int) { return g.w, g.h }
 
-// faceAxis maps a face index to its rotation axis (0=x,1=y,2=z) and the sign of its
-// outward normal along that axis.
-func faceAxis(face int) (axis, sign int) {
-	switch face {
-	case 0:
-		return 1, 1 // U +y
-	case 3:
-		return 1, -1 // D -y
-	case 1:
-		return 0, 1 // R +x
-	case 4:
-		return 0, -1 // L -x
-	case 2:
-		return 2, 1 // F +z
-	default:
-		return 2, -1 // B -z
-	}
-}
-
-func rotateAxis(p vec3, axis int, s, c float32) vec3 {
-	switch axis {
-	case 0: // x
-		return vec3{p.x, p.y*c - p.z*s, p.y*s + p.z*c}
-	case 1: // y
-		return vec3{p.x*c + p.z*s, p.y, -p.x*s + p.z*c}
-	default: // z
-		return vec3{p.x*c - p.y*s, p.x*s + p.y*c, p.z}
-	}
-}
-
-func rotate(p vec3, sinY, cosY, sinX, cosX float32) vec3 {
-	x := p.x*cosY + p.z*sinY
-	z := -p.x*sinY + p.z*cosY
-	y := p.y*cosX - z*sinX
-	z = p.y*sinX + z*cosX
-	return vec3{x, y, z}
-}
-
-func easeInOut(t float32) float32 { return t * t * (3 - 2*t) }
-
-func quadNormal(p [4]vec3) vec3 {
-	return normalize(cross(p[1].sub(p[0]), p[3].sub(p[0])))
-}
-
-func cross(a, b vec3) vec3 {
-	return vec3{a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x}
-}
-
 func fillQuad(screen *ebiten.Image, q [4][2]float32, col color.RGBA) {
 	var path vector.Path
 	path.MoveTo(q[0][0], q[0][1])
@@ -894,14 +696,6 @@ func shade(c color.RGBA, f float32) color.RGBA {
 }
 
 func clamp(v, lo, hi float32) float32 { return max(lo, min(hi, v)) }
-func dot(a, b vec3) float32           { return a.x*b.x + a.y*b.y + a.z*b.z }
-func normalize(v vec3) vec3 {
-	l := float32(math.Sqrt(float64(dot(v, v))))
-	if l == 0 {
-		return v
-	}
-	return v.scale(1 / l)
-}
 func fsincos(a float32) (float32, float32) {
 	s, c := math.Sincos(float64(a))
 	return float32(s), float32(c)
@@ -962,7 +756,7 @@ func Play(ctrl Controller) error {
 	g := &gameState{
 		ctrl:  ctrl,
 		mode:  modeSingle,
-		polys: buildPolys(),
+		polys: render.BuildPolys(),
 		yaw:   0.6, pitch: 0.5, zoom: 1,
 	}
 	g.views = []*cubeView{newSingleView(ctrl)}

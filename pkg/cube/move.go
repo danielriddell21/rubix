@@ -28,6 +28,10 @@ const (
 	NumMoves
 )
 
+// NoMove is a sentinel that is not one of the 18 turns. It is handy for APIs that take an
+// optional move (e.g. a renderer that animates a turn) to mean "no move".
+const NoMove Move = 0xff
+
 // Face returns the face index (0=U,1=R,2=F,3=D,4=L,5=B) of the move.
 func (m Move) Face() int { return int(m) / 3 }
 
