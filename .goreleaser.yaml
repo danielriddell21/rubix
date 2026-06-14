@@ -22,7 +22,7 @@ builds:
   # Cocoa), so it is macOS-only and built natively on the macOS runner.
   - id: gui
     main: ./cmd/rubix
-    binary: rubix-gui
+    binary: rubix
     env:
       - CGO_ENABLED=1
     flags:
@@ -36,12 +36,14 @@ archives:
   - id: headless
     ids: [headless]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
   - id: gui
     ids: [gui]
     name_template: "{{ .ProjectName }}-gui_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
 
 checksum:
   name_template: "checksums.txt"
