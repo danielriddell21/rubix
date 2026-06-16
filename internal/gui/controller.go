@@ -25,6 +25,12 @@ type Controller struct {
 	RecordFPS    int
 	RecordScale  int
 	RecordKeys   string
+
+	// Window chrome for coordinated multi-window mode: Title overrides the window title,
+	// and a non-zero OffsetIndex cascades the window's opening position so child windows
+	// don't stack exactly on the leader.
+	Title       string
+	OffsetIndex int
 }
 
 // Cell is one cube in a replica grid: a starting scramble, the strategy that solves it,

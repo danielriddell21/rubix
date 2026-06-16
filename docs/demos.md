@@ -44,10 +44,23 @@ Zooms in and out (the scroll wheel does the same).
 
 ![zoom](demos/zoom.gif)
 
-## `+` / `-` — add/remove cubes, `tab` — focus next cube
-The cube count is the layout: one cube is the single self-driving view; pressing `+` adds
-cubes to make a compare grid (each with its own scramble, all on the default solver until
-you change one with `s`), and `-` removes them. `tab` moves the highlight between cubes. The
-clip below presses `+` a few times, then cycles focus with `tab`.
+## `+` / `-` — open/close cube windows
+Each cube gets its own window. Pressing `+` opens another cube window and `-` closes the
+newest; the single window you launched is the "leader" and closing it closes them all. Every
+window is a self-contained cube (its own scramble, change its solver with `s`), but the view
+is **synchronised**: orbit, zoom (`shift`+↑/↓ or wheel), `x`-ray, `space` unfold and the `m`
+move list all mirror across the windows, and `r` re-scrambles every window at once. So you can
+fan out a row of windows, drive the camera from any one of them, and give each a different
+solver to compare side by side.
 
-![compare](demos/compare.gif)
+Because the windows are separate OS processes, the built-in recorder (which captures one
+window) can't film this — the clip below is a screen recording.
+
+![multi-window](demos/multi-window.gif)
+
+### Recording note
+The single-window grid still exists for the GIF recorder (`just demos`): with `--record`,
+`+`/`-` grow/shrink an in-window grid and `tab` focuses a cell (single-process, so the
+per-keybind demos above stay reproducible). That recorded grid looks like this:
+
+![compare grid (recorder)](demos/compare.gif)

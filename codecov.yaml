@@ -5,10 +5,14 @@ coverage:
       default:
         target: auto
         threshold: 1%
+    # Patch (per-PR diff) coverage is advisory: the GUI/visualizer packages mix
+    # unit-testable logic (well covered) with code that can only run with a display or by
+    # spawning child window processes (the multi-window hub's runLeader/runChild/spawnChild,
+    # and the ebiten-tagged render loop, which the headless CI build doesn't even compile).
+    # Project coverage stays enforced so overall coverage can't quietly slide.
     patch:
       default:
-        target: auto
-        threshold: 1%
+        informational: true
 
 # The entrypoint is glue and tests aren't themselves covered code.
 ignore:

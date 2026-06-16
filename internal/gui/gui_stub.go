@@ -11,6 +11,6 @@ func Available() bool { return false }
 
 // Play would open the visualizer. In the stub build it returns an error directing the
 // user to rebuild with the ebiten tag.
-func Play(ctrl Controller) error {
+func Play(ctrl Controller, link *Link) error {
 	return errors.New("visualizer not built into this binary; rebuild with: go build -tags ebiten")
 }

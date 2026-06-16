@@ -223,6 +223,28 @@ type gameState struct {
 	recSaved  bool
 	frame     int
 	script    *keyScript
+
+	// Coordinated multi-window: when link != nil, shared view state (camera, x-ray,
+	// unfold, move-list) is mirrored to the other windows via the hub, and +/- spawn and
+	// close windows instead of growing an in-window grid. lastSent is the last shared
+	// state published, so applying an inbound update doesn't echo back.
+	link     *Link
+	lastSent Msg
+}
+
+// shared is the current synchronised view state, sent to the other windows when it changes.
+func (g *gameState) shared() Msg {
+	return Msg{
+		Type: "state", Yaw: g.yaw, Pitch: g.pitch, Zoom: g.zoom,
+		UnfoldTo: g.unfoldTo, Xray: g.xray, ShowMoves: g.showMoves,
+	}
+}
+
+// applyShared mirrors another window's view state onto this one without re-publishing it.
+func (g *gameState) applyShared(m Msg) {
+	g.yaw, g.pitch, g.zoom = m.Yaw, m.Pitch, m.Zoom
+	g.unfoldTo, g.xray, g.showMoves = m.UnfoldTo, m.Xray, m.ShowMoves
+	g.lastSent = g.shared()
 }
 
 func (g *gameState) grid() bool { return len(g.views) > 1 }
@@ -492,6 +514,7 @@ func (g *gameState) Update() error {
 		for _, v := range g.views {
 			v.rescramble(v.ctrl.Scramble)
 		}
+		g.send(Msg{Type: "rescramble"}) // make the other windows rescramble too
 	}
 	if g.keyTapped(ebiten.KeyS) {
 		v := g.views[g.focus]
@@ -507,19 +530,68 @@ func (g *gameState) Update() error {
 	if g.keyTapped(ebiten.KeyM) {
 		g.showMoves = !g.showMoves
 	}
-	// Layout by count: "+" adds a cube (one cube → the compare grid → more cubes), "-"
-	// removes one (back down to the single self-driving cube). "s" changes a cube's solver.
+	// "+" adds a cube, "-" removes one. Coordinated: spawn/close a separate window via the
+	// hub. Otherwise (recording): grow/shrink the in-window grid. "s" changes a cube's solver.
 	if g.keyTapped(ebiten.KeyEqual) || g.keyTapped(ebiten.KeyKPAdd) {
-		g.setCount(len(g.views) + 1)
+		if g.link != nil {
+			g.send(Msg{Type: "add"})
+		} else {
+			g.setCount(len(g.views) + 1)
+		}
 	}
 	if g.keyTapped(ebiten.KeyMinus) || g.keyTapped(ebiten.KeyKPSubtract) {
-		g.setCount(len(g.views) - 1)
+		if g.link != nil {
+			g.send(Msg{Type: "remove"})
+		} else {
+			g.setCount(len(g.views) - 1)
+		}
 	}
 
 	for _, v := range g.views {
 		v.advanceSolve(g.unfold)
 	}
+
+	// Coordinated windows: apply inbound shared state/events, then publish local changes.
+	if g.link != nil {
+		for done := false; !done; {
+			select {
+			case m, ok := <-g.link.In:
+				if !ok || m.Type == "quit" {
+					return ebiten.Termination // leader/hub gone, or asked to close
+				}
+				switch m.Type {
+				case "state":
+					g.applyShared(m)
+				case "rescramble":
+					for _, v := range g.views {
+						v.rescramble(v.ctrl.Scramble)
+					}
+				}
+			default:
+				done = true
+			}
+		}
+		if cur := g.shared(); cur != g.lastSent {
+			if g.send(cur) {
+				g.lastSent = cur
+			}
+		}
+	}
 	return nil
+}
+
+// send publishes a message to the hub without blocking the frame; it reports whether the
+// message was accepted. It is a no-op when the window is not coordinated.
+func (g *gameState) send(m Msg) bool {
+	if g.link == nil || g.link.Out == nil {
+		return false
+	}
+	select {
+	case g.link.Out <- m:
+		return true
+	default:
+		return false
+	}
 }
 
 func (g *gameState) Draw(screen *ebiten.Image) {
@@ -810,11 +882,13 @@ func newGridView(ctrl Controller, cell Cell) *cubeView {
 	}
 }
 
-// Play opens the visualizer driven by ctrl. It starts as a single self-driving cube;
-// the 2 and 3 keys switch to the compare and replica grids at runtime.
-func Play(ctrl Controller) error {
+// Play opens the visualizer driven by ctrl. It shows a single self-driving cube; "+"/"-"
+// grow and shrink it (an in-window grid while recording, or — when link is non-nil —
+// separate coordinated windows that mirror the camera, x-ray, unfold and move-list).
+func Play(ctrl Controller, link *Link) error {
 	g := &gameState{
 		ctrl:  ctrl,
+		link:  link,
 		polys: render.BuildPolys(),
 		yaw:   0.6, pitch: 0.5, zoom: 1,
 	}
@@ -833,11 +907,26 @@ func Play(ctrl Controller) error {
 	for _, v := range g.views {
 		v.kickSolve()
 	}
+	g.lastSent = g.shared() // suppress an initial publish; all windows start identical
 	ebiten.SetWindowSize(g.w, g.h)
-	ebiten.SetWindowTitle("rubix")
+	title := ctrl.Title
+	if title == "" {
+		title = "rubix"
+	}
+	ebiten.SetWindowTitle(title)
+	if ctrl.OffsetIndex > 0 {
+		// Cascade child windows so they don't open exactly on top of the leader.
+		ebiten.SetWindowPosition(60+ctrl.OffsetIndex*36, 60+ctrl.OffsetIndex*36)
+	}
 	if g.rec == nil {
 		// Let the user resize the window; Layout reflows the scene to the new size.
 		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	}
+	if link != nil {
+		// Coordinated windows must keep updating while unfocused, so background windows
+		// stay in sync, keep animating, and notice the leader closing (their Update must
+		// run to drain the closed link and terminate).
+		ebiten.SetRunnableOnUnfocused(true)
 	}
 	return ebiten.RunGame(g)
 }

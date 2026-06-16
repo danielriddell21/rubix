@@ -50,10 +50,9 @@ go run -tags ebiten ./cmd/rubix view
 | shift + ↑/↓, or scroll wheel | zoom |
 | `space` | unfold to a flat net |
 | `x` | x-ray (see all sides) |
-| `r` | new scramble |
-| `s` | switch solver (the focused cube) |
-| `+` / `-` | add / remove a cube — one cube is the single view, more is a compare grid |
-| `tab` | focus the next cube (in the grid) |
+| `r` | new scramble (all windows) |
+| `s` | switch this window's solver |
+| `+` / `-` | open / close another cube window — orbit, zoom, x-ray, unfold and the move list stay in sync across them |
 
 See [docs/demos.md](docs/demos.md) for an animated GIF of each keybind.
 

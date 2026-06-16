@@ -169,7 +169,7 @@ func cmdSolve(args []string) error {
 		}
 	}
 	if *view {
-		return gui.Play(rec.apply(guiController(&c, strategyIndex(*strategy), 0)))
+		return gui.Play(rec.apply(guiController(&c, strategyIndex(*strategy), 0)), nil)
 	}
 	return nil
 }
@@ -344,11 +344,22 @@ func warmTables() error {
 func cmdView(args []string) error {
 	fs := flag.NewFlagSet("view", flag.ContinueOnError)
 	seed := fs.Int64("seed", 0, "scramble seed (0 = random each run); set for reproducible recordings")
+	child := fs.Int("child", -1, "internal: run as a coordinated child window with this index")
 	rec := addRecordFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	// The visualizer is self-driving: it scrambles and solves on its own; press "r"
-	// for a new scramble and "s" to switch solver.
-	return gui.Play(rec.apply(guiController(nil, strategyIndex("multi"), *seed)))
+	// The visualizer is self-driving: it scrambles and solves on its own; press "r" for a
+	// new scramble, "s" to switch solver, and "+"/"-" to open or close more cube windows.
+	ctrl := rec.apply(guiController(nil, strategyIndex("multi"), *seed))
+	switch {
+	case ctrl.Record != "":
+		return gui.Play(ctrl, nil) // recording is single-process and uncoordinated
+	case *child >= 0:
+		ctrl.Title = fmt.Sprintf("rubix #%d", *child)
+		ctrl.OffsetIndex = *child
+		return runChild(ctrl)
+	default:
+		return runLeader(ctrl)
+	}
 }
