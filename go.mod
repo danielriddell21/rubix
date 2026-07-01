@@ -6,7 +6,7 @@ require (
 	github.com/ev3go/ev3dev v0.0.0-20230218223055-ac0bd47ba218
 	github.com/hajimehoshi/ebiten/v2 v2.9.9
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.9
+	github.com/spf13/pflag v1.0.10
 )
 
 require (
