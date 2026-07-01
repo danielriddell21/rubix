@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,30 +11,24 @@ import (
 	"github.com/danielriddell21/rubix/internal/gui"
 )
 
-// maxWindows caps how many coordinated cube windows can be open at once (leader + children).
 const maxWindows = 16
 
-// eofType is an internal pseudo-message a child's reader injects when its pipe closes, so
-// the hub drops that window.
 const eofType = "_eof"
 
-// hub relays the window-coordination protocol between the leader window (participant 0) and
-// the child windows it spawns. A "state" or "rescramble" from any window is rebroadcast to
-// the others; "add"/"remove" spawn and close child processes. All participant bookkeeping
-// happens in the single run goroutine (plus shutdown from the main goroutine), guarded by mu.
 type hub struct {
-	self    string      // path to this binary, for spawning children
-	inbox   chan srcMsg // merged inbound from every participant
+	self    string
+	inbox   chan srcMsg
+	done    chan struct{}
 	mu      sync.Mutex
 	parts   map[int]*participant
-	nextID  int     // next participant id (0 = leader)
-	spawned int     // monotonic count of children ever spawned (for window titles)
-	last    gui.Msg // last shared "state", replayed to a freshly added child
+	nextID  int
+	spawned int
+	last    gui.Msg
 }
 
 type participant struct {
-	out chan gui.Msg // messages TO this window
-	cmd *exec.Cmd    // nil for the leader
+	out chan gui.Msg
+	cmd *exec.Cmd
 }
 
 type srcMsg struct {
@@ -42,11 +37,9 @@ type srcMsg struct {
 }
 
 func newHub(self string) *hub {
-	return &hub{self: self, inbox: make(chan srcMsg, 128), parts: map[int]*participant{}}
+	return &hub{self: self, inbox: make(chan srcMsg, 128), done: make(chan struct{}), parts: map[int]*participant{}}
 }
 
-// addParticipant registers an outbound channel and returns its id. A newly added window is
-// immediately sent the last known shared state so it mirrors the others on open.
 func (h *hub) addParticipant(out chan gui.Msg, cmd *exec.Cmd) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -59,10 +52,16 @@ func (h *hub) addParticipant(out chan gui.Msg, cmd *exec.Cmd) int {
 	return id
 }
 
-// run processes inbound messages until the inbox is closed.
 func (h *hub) run() {
-	for sm := range h.inbox {
-		h.handle(sm.id, sm.m)
+	// Stop on shutdown rather than ranging over inbox: child reader goroutines
+	// may still send after teardown, so inbox is never closed.
+	for {
+		select {
+		case sm := <-h.inbox:
+			h.handle(sm.id, sm.m)
+		case <-h.done:
+			return
+		}
 	}
 }
 
@@ -84,8 +83,6 @@ func (h *hub) handle(src int, m gui.Msg) {
 	}
 }
 
-// broadcastExcept delivers m to every participant but src. Sends are non-blocking so one
-// slow window never stalls the others (shared state is idempotent — the next change resends).
 func (h *hub) broadcastExcept(src int, m gui.Msg) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -96,7 +93,6 @@ func (h *hub) broadcastExcept(src int, m gui.Msg) {
 	}
 }
 
-// drop removes a window (its pipe closed) and stops its writer / kills its process.
 func (h *hub) drop(id int) {
 	h.mu.Lock()
 	p := h.parts[id]
@@ -110,7 +106,6 @@ func (h *hub) drop(id int) {
 	}
 }
 
-// removeNewest asks the most recently spawned child window to close.
 func (h *hub) removeNewest() {
 	h.mu.Lock()
 	newest, out := -1, chan gui.Msg(nil)
@@ -125,7 +120,6 @@ func (h *hub) removeNewest() {
 	}
 }
 
-// spawnChild starts a new child window process and wires its pipes to the hub.
 func (h *hub) spawnChild() {
 	h.mu.Lock()
 	if len(h.parts) >= maxWindows {
@@ -136,17 +130,20 @@ func (h *hub) spawnChild() {
 	idx := h.spawned
 	h.mu.Unlock()
 
-	cmd := exec.Command(h.self, "view", fmt.Sprintf("--child=%d", idx))
+	cmd := exec.CommandContext(context.Background(), h.self, "view", fmt.Sprintf("--child=%d", idx))
 	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "spawn child window: stdin pipe: %v\n", err)
 		return
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "spawn child window: stdout pipe: %v\n", err)
 		return
 	}
 	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "spawn child window: start: %v\n", err)
 		return
 	}
 
@@ -176,8 +173,6 @@ func (h *hub) spawnChild() {
 	}()
 }
 
-// shutdown kills every child window (used when the leader window closes). Each child also
-// self-terminates when its stdin closes, so this is just prompt cleanup.
 func (h *hub) shutdown() {
 	h.mu.Lock()
 	cmds := make([]*exec.Cmd, 0, len(h.parts))
@@ -192,6 +187,7 @@ func (h *hub) shutdown() {
 			_ = c.Process.Kill()
 		}
 	}
+	close(h.done)
 }
 
 func trySend(ch chan gui.Msg, m gui.Msg) {
@@ -201,8 +197,6 @@ func trySend(ch chan gui.Msg, m gui.Msg) {
 	}
 }
 
-// runLeader opens the leader window and runs the coordination hub that spawns and syncs
-// child windows. It blocks until the leader window closes, then tears down the children.
 func runLeader(ctrl gui.Controller) error {
 	h := newHub(os.Args[0])
 	leaderIn := make(chan gui.Msg, 64)  // hub -> leader (the leader's participant out)
@@ -214,14 +208,15 @@ func runLeader(ctrl gui.Controller) error {
 			h.inbox <- srcMsg{0, m}
 		}
 	}()
-	err := gui.Play(ctrl, &gui.Link{In: leaderIn, Out: leaderOut})
+	err := gui.Run(gui.Config{Controller: ctrl, Link: &gui.Link{In: leaderIn, Out: leaderOut}})
 	close(leaderOut)
 	h.shutdown()
-	return err
+	if err != nil {
+		return fmt.Errorf("run gui: %w", err)
+	}
+	return nil
 }
 
-// runChild opens a child window connected to the leader over stdin/stdout. When the leader
-// exits (stdin closes) the window terminates itself.
 func runChild(ctrl gui.Controller) error {
 	in := make(chan gui.Msg, 64)
 	out := make(chan gui.Msg, 64)
@@ -244,5 +239,8 @@ func runChild(ctrl gui.Controller) error {
 			}
 		}
 	}()
-	return gui.Play(ctrl, &gui.Link{In: in, Out: out})
+	if err := gui.Run(gui.Config{Controller: ctrl, Link: &gui.Link{In: in, Out: out}}); err != nil {
+		return fmt.Errorf("run gui: %w", err)
+	}
+	return nil
 }

@@ -2,9 +2,6 @@ package solver
 
 import "github.com/danielriddell21/rubix/pkg/cube"
 
-// pruneSolver replaces the search's estimate with exact prune tables (edge orientation,
-// corner orientation, middle-slice and their combinations), giving the domino solver an
-// exact lower bound — the big speedup from video 2, fast and 100% reliable.
 type pruneSolver struct{}
 
 func (pruneSolver) Name() string     { return "prune" }

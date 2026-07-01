@@ -3,18 +3,13 @@ package solver
 import (
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/danielriddell21/rubix/internal/solver/search"
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// cfopSolver implements the CFOP method (video 2: Cross → F2L → OLL → PLL) on the D
-// (down) layer. Each stage is an IDA* search whose goal includes all earlier stages,
-// so the stages compose into a correct full solution. Speed comes from exact pruning
-// tables: a cross table and a small per-pair table give an admissible heuristic that
-// rises when an already-solved piece is disturbed, so the search keeps prior work
-// intact and stays shallow.
 type cfopSolver struct{}
 
 func (cfopSolver) Name() string     { return "cfop" }
@@ -25,7 +20,7 @@ func (cfopSolver) Solve(c cube.Cube) (Result, error) {
 		moves, nodes, err := cfopSolve(c)
 		if err != nil {
 			// A stage that exceeds its depth is a give-up, not a hard error.
-			return moves, false, nodes, nil
+			return moves, false, nodes, nil //nolint:nilerr // depth give-up is a non-result, not an error
 		}
 		return moves, c.Applied(moves...).IsSolved(), nodes, nil
 	})
@@ -85,7 +80,8 @@ func cfopSolve(c cube.Cube) ([]cube.Move, uint64, error) {
 		}
 	}
 	// OLL: orient the last layer, keeping the first two layers.
-	ollDists := []func(cube.Cube) int{crossDist, pairDist[0], pairDist[1], pairDist[2], pairDist[3],
+	ollDists := []func(cube.Cube) int{
+		crossDist, pairDist[0], pairDist[1], pairDist[2], pairDist[3],
 		func(c cube.Cube) int { return int(co[twistCoord(c)]) },
 		func(c cube.Cube) int { return int(eo[flipCoord(c)]) },
 	}
@@ -93,15 +89,15 @@ func cfopSolve(c cube.Cube) ([]cube.Move, uint64, error) {
 		return nil, nodes, err
 	}
 	// PLL: permute the last layer to finish.
-	pllDists := append(ollDists, func(c cube.Cube) int { return int(cp[cornPermCoord(c)]) })
+	pllDists := slices.Concat(ollDists, []func(cube.Cube) int{
+		func(c cube.Cube) int { return int(cp[cornPermCoord(c)]) },
+	})
 	if err := cfopStage(&cur, &sol, &nodes, cube.Cube.IsSolved, sumDist(pllDists...), 22, "pll"); err != nil {
 		return nil, nodes, err
 	}
 	return sol, nodes, nil
 }
 
-// sumDist adds several distance functions into one (inadmissible) heuristic that
-// guides the staged searches strongly toward keeping solved pieces intact.
 func sumDist(fns ...func(cube.Cube) int) search.Heuristic {
 	return func(c cube.Cube) int {
 		s := 0
@@ -123,7 +119,6 @@ func crossSolved(c cube.Cube) bool {
 	return true
 }
 
-// f2lGoal requires the cross plus the first k+1 corner/edge pairs solved.
 func f2lGoal(k int) search.Goal {
 	return func(c cube.Cube) bool {
 		if !crossSolved(c) {
@@ -141,7 +136,6 @@ func f2lGoal(k int) search.Goal {
 	}
 }
 
-// ollGoal: first two layers solved and the last layer fully oriented.
 func ollGoal(c cube.Cube) bool {
 	if !f2lGoal(3)(c) {
 		return false

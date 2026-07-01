@@ -11,38 +11,25 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// ev3.go drives a real MindCub3r-style robot through the ev3dev sysfs interface: a
-// turntable motor spins/holds the cube, a tilt-arm motor flips it and holds the top
-// layers while the turntable twists the bottom, and a colour sensor on a swing arm
-// scans the faces. Gear ratios and arm positions below are the standard MindCub3r
-// build; adjust them with Calibrate for a different rig.
-//
-// This file only compiles with the `ev3` tag and is meant to run on an ev3dev brick;
-// it is exercised here through cross-compilation rather than on hardware.
-
 const (
-	basePort  = "ev3-ports:outA" // turntable
-	armPort   = "ev3-ports:outB" // tilt arm
-	colorPort = "ev3-ports:in1"  // colour sensor
+	basePort  = "ev3-ports:outA"
+	armPort   = "ev3-ports:outB"
+	colorPort = "ev3-ports:in1"
 
 	lMotor = "lego-ev3-l-motor"
 	mMotor = "lego-ev3-m-motor"
 	colorS = "lego-ev3-color"
 
-	// Turntable gearing: motor degrees for a 90° cube rotation, with a little extra
-	// to take up backlash on each quarter turn.
 	baseQuarter  = 270
 	baseBacklash = 18
 
-	// Tilt-arm motor positions (degrees from rest).
-	armHold = 110 // lower onto the cube to hold the upper layers
-	armFlip = 200 // push further to tip the cube forward
+	armHold = 110
+	armFlip = 200
 
 	baseSpeed = 600
 	armSpeed  = 700
 )
 
-// EV3 is the ev3dev-backed robot driver.
 type EV3 struct {
 	base  *ev3dev.TachoMotor
 	arm   *ev3dev.TachoMotor
@@ -67,7 +54,6 @@ func newEV3() (*EV3, error) {
 	return e, e.Home()
 }
 
-// run drives a motor a relative number of degrees and waits for it to stop.
 func run(m *ev3dev.TachoMotor, degrees, speed int) error {
 	m.SetSpeedSetpoint(speed).SetPositionSetpoint(degrees).SetStopAction("hold").Command("run-to-rel-pos")
 	if err := m.Err(); err != nil {
@@ -77,7 +63,6 @@ func run(m *ev3dev.TachoMotor, degrees, speed int) error {
 	return err
 }
 
-// armTo moves the tilt arm to an absolute position (0 = rest).
 func (e *EV3) armTo(pos int) error {
 	cur, err := e.arm.Position()
 	if err != nil {
@@ -97,8 +82,6 @@ func (e *EV3) rotate(quarters int) error {
 	return e.spin(quarters, false)
 }
 
-// spin turns the turntable. When holding, the arm pins the upper layers so only the
-// bottom layer turns; backlash is taken up by over-rotating and easing back.
 func (e *EV3) spin(quarters int, hold bool) error {
 	if hold {
 		if err := e.armTo(armHold); err != nil {
@@ -131,7 +114,6 @@ func (e *EV3) spin(quarters int, hold bool) error {
 
 func (e *EV3) turnBottom(quarters int) error { return e.spin(quarters, true) }
 
-// Execute lowers the moves to primitives and drives the motors.
 func (e *EV3) Execute(moves []cube.Move) error {
 	for _, p := range PlanMoves(moves) {
 		var err error

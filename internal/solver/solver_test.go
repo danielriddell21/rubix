@@ -6,13 +6,10 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// completeSolvers always solve any cube (100% in the videos).
 var completeSolvers = []string{"cfop", "prune", "multi"}
 
-// allSolverNames in registry (video) order.
 var allSolverNames = []string{"greedy", "sandwich", "oriented", "cfop", "domino", "iddfs", "idastar", "prune", "multi"}
 
-// TestCompleteSolvers checks the reliable solvers on full random scrambles.
 func TestCompleteSolvers(t *testing.T) {
 	n := int64(15)
 	if testing.Short() {
@@ -41,9 +38,6 @@ func TestCompleteSolvers(t *testing.T) {
 	}
 }
 
-// TestSolverValidity exercises every solver on shallow scrambles: any solution a
-// solver reports as solved must actually solve the cube, and the shallow cubes (well
-// within the greedy lookahead) should all be solved.
 func TestSolverValidity(t *testing.T) {
 	for _, name := range allSolverNames {
 		s, err := Get(name)
@@ -73,8 +67,6 @@ func TestSolverValidity(t *testing.T) {
 	}
 }
 
-// TestMultiShorterThanCfop checks the move-count direction the video reports: the
-// multi-search solver finds notably shorter solutions than the CFOP solver.
 func TestMultiShorterThanCfop(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skip in short mode")

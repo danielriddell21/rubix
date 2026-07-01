@@ -1,8 +1,5 @@
 //go:build !ebiten
 
-// The Link/Msg wire types are tag-free, so they are exercised in the default (headless)
-// build; the ebiten build pulls in Ebiten's display-requiring init.
-
 package gui
 
 import (

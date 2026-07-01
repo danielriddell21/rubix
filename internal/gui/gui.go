@@ -1,10 +1,5 @@
 //go:build ebiten
 
-// Package gui is an Ebiten visualizer of the live cube state. It renders the cube as a
-// real 3D object with raised plastic tiles, animates each turn, and is self-driving:
-// it scrambles and solves on its own, lets you orbit/zoom, x-ray, unfold to a flat net,
-// re-scramble ("r"), switch solver ("s") and toggle the move list ("m"). In replica mode
-// it shows a grid of independent cubes ("tab" focuses one). Built only with `ebiten`.
 package gui
 
 import (
@@ -27,16 +22,16 @@ import (
 const (
 	winW        = 640
 	winH        = 640
-	scale       = 40 // world units → pixels (before zoom)
-	turnFrames  = 9  // frames per animated layer turn
-	netFrames   = 8  // frames per move while unfolded flat
+	scale       = 40
+	turnFrames  = 9
+	netFrames   = 8
 	orbitSpeed  = 0.035
 	zoomSpeed   = 0.04
 	unfoldSpeed = 0.04
 
-	cellSize = 320  // target pixels per grid cell
-	maxWin   = 1280 // largest window edge in replica grid mode
-	maxCells = 16   // cap on cubes drawn in the grid (the CLI table handles more)
+	cellSize = 320
+	maxWin   = 1280
+	maxCells = 16
 )
 
 var (
@@ -48,7 +43,6 @@ var (
 	highlight  = color.RGBA{70, 70, 30, 255}
 )
 
-// whiteSub is a 1px white source used to fill vector triangles with a flat colour.
 var whiteSub *ebiten.Image
 
 func init() {
@@ -57,7 +51,6 @@ func init() {
 	whiteSub = w.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
 }
 
-// Available reports whether the visualizer is compiled in.
 func Available() bool { return true }
 
 type solveOut struct {
@@ -66,11 +59,9 @@ type solveOut struct {
 	solved bool
 }
 
-// cubeView is one animated cube: its scramble, the solution being played and the
-// per-move animation state. The camera and geometry are shared and live on gameState.
 type cubeView struct {
 	ctrl     Controller
-	start    cube.Cube // the current scramble (re-solved when the strategy changes)
+	start    cube.Cube
 	stratIdx int
 	label    string
 	solving  bool
@@ -80,7 +71,7 @@ type cubeView struct {
 	c          cube.Cube
 	moves      []cube.Move
 	idx        int
-	frame      int // net-mode move pacing
+	frame      int
 	lastSolved bool
 
 	turning   bool
@@ -88,8 +79,6 @@ type cubeView struct {
 	turnMove  cube.Move
 }
 
-// kickSolve restarts the animation from the current scramble and solves it (with the
-// current strategy) on a background goroutine so the window never blocks.
 func (v *cubeView) kickSolve() {
 	v.c = v.start
 	v.idx, v.frame, v.turnFrame = 0, 0, 0
@@ -109,7 +98,6 @@ func (v *cubeView) rescramble(scramble func() cube.Cube) {
 	v.kickSolve()
 }
 
-// drainSolve picks up a finished solve, ignoring stale results from a superseded kick.
 func (v *cubeView) drainSolve() {
 	select {
 	case out := <-v.solveCh:
@@ -120,7 +108,6 @@ func (v *cubeView) drainSolve() {
 	}
 }
 
-// advanceSolve plays the solution: animated turns while folded, instant snaps while flat.
 func (v *cubeView) advanceSolve(unfold float32) {
 	if unfold >= 0.5 {
 		v.turning = false
@@ -172,7 +159,6 @@ func (v *cubeView) status() string {
 	}
 }
 
-// shortStatus is the compact per-cell readout for the grid.
 func (v *cubeView) shortStatus() string {
 	switch {
 	case v.solving:
@@ -191,9 +177,6 @@ func (v *cubeView) shortStatus() string {
 	}
 }
 
-// gameState owns the shared camera, geometry and the set of cube views. The number of
-// cubes is the layout: one cube is the single self-driving view, two or more is the compare
-// grid. The "+" and "-" keys change the count (and so move between the two).
 type gameState struct {
 	ctrl       Controller
 	views      []*cubeView
@@ -204,7 +187,7 @@ type gameState struct {
 
 	yaw, pitch float32
 	zoom       float32
-	unfold     float32 // 0 = cube, 1 = flat net
+	unfold     float32
 	unfoldTo   float32
 	xray       bool
 	dragging   bool
@@ -214,9 +197,6 @@ type gameState struct {
 	focus     int
 	showMoves bool
 
-	// Recording (set when ctrl.Record != ""): captures frames in Draw and, once enough
-	// are gathered, saves the GIF and ends the run from Update. script, when set, injects
-	// keybinds on a frame timeline so each demo records the same actions every run.
 	rec       *recorder
 	recPath   string
 	recFrames int
@@ -224,15 +204,10 @@ type gameState struct {
 	frame     int
 	script    *keyScript
 
-	// Coordinated multi-window: when link != nil, shared view state (camera, x-ray,
-	// unfold, move-list) is mirrored to the other windows via the hub, and +/- spawn and
-	// close windows instead of growing an in-window grid. lastSent is the last shared
-	// state published, so applying an inbound update doesn't echo back.
 	link     *Link
 	lastSent Msg
 }
 
-// shared is the current synchronised view state, sent to the other windows when it changes.
 func (g *gameState) shared() Msg {
 	return Msg{
 		Type: "state", Yaw: g.yaw, Pitch: g.pitch, Zoom: g.zoom,
@@ -240,7 +215,6 @@ func (g *gameState) shared() Msg {
 	}
 }
 
-// applyShared mirrors another window's view state onto this one without re-publishing it.
 func (g *gameState) applyShared(m Msg) {
 	g.yaw, g.pitch, g.zoom = m.Yaw, m.Pitch, m.Zoom
 	g.unfoldTo, g.xray, g.showMoves = m.UnfoldTo, m.Xray, m.ShowMoves
@@ -249,7 +223,6 @@ func (g *gameState) applyShared(m Msg) {
 
 func (g *gameState) grid() bool { return len(g.views) > 1 }
 
-// defaultStrategy is the solver a freshly built cube runs.
 func (g *gameState) defaultStrategy() string {
 	if g.ctrl.Start >= 0 && g.ctrl.Start < len(g.ctrl.Strategies) {
 		return g.ctrl.Strategies[g.ctrl.Start]
@@ -260,16 +233,11 @@ func (g *gameState) defaultStrategy() string {
 	return ""
 }
 
-// newCube builds one grid cube with a fresh scramble on the default solver. Index i only
-// labels the cell; change a cube's solver in-place with the "s" key.
 func (g *gameState) newCube(i int) *cubeView {
 	name := g.defaultStrategy()
 	return newGridView(g.ctrl, Cell{Strategy: name, Initial: g.ctrl.Scramble(), Label: fmt.Sprintf("#%d %s", i, name)})
 }
 
-// relayout recomputes the grid dimensions for the current views and, when not recording,
-// resizes the window to fit (capped to the monitor). The recording size stays fixed so GIF
-// frames keep constant dimensions.
 func (g *gameState) relayout() {
 	g.cols, g.rows = gridDims(len(g.views))
 	if g.focus >= len(g.views) {
@@ -281,10 +249,6 @@ func (g *gameState) relayout() {
 	}
 }
 
-// setCount changes how many cubes are shown (clamped to [1, maxCells]). One cube is the
-// single self-driving view; two or more is the compare grid. Growing within the grid keeps
-// the cubes already on screen and only kicks off the new ones; crossing the 1↔many boundary
-// rebuilds. Each new cube gets its own scramble on the default solver.
 func (g *gameState) setCount(n int) {
 	n = clampInt(n, 1, maxCells)
 	if n == len(g.views) {
@@ -316,12 +280,8 @@ func (g *gameState) setCount(n int) {
 
 func clampInt(v, lo, hi int) int { return max(lo, min(v, hi)) }
 
-// frameRange is an inclusive interval of frame indices during which a key is held.
 type frameRange struct{ lo, hi int }
 
-// keyScript injects keybinds on a fixed timeline so a recording performs the same actions
-// every run: taps fire a single just-pressed at the given frame(s); holds keep a key down
-// across a range of frames.
 type keyScript struct {
 	taps  map[ebiten.Key][]int
 	holds map[ebiten.Key][]frameRange
@@ -351,21 +311,14 @@ func (s *keyScript) held(k ebiten.Key, frame int) bool {
 	return false
 }
 
-// keyDown reports a key as held if the user is pressing it or the script holds it now.
 func (g *gameState) keyDown(k ebiten.Key) bool {
 	return ebiten.IsKeyPressed(k) || g.script.held(k, g.frame)
 }
 
-// keyTapped reports a fresh press from the user or a scripted tap on this frame.
 func (g *gameState) keyTapped(k ebiten.Key) bool {
 	return inpututil.IsKeyJustPressed(k) || g.script.justPressed(k, g.frame)
 }
 
-// buildScript turns a comma-separated keybind list (e.g. "space", "left", "replica,tab")
-// into a timeline over recFrames frames. Tap actions fire in order, each in its own slot,
-// so multi-key demos work (e.g. switch to the replica grid, then cycle focus). A lone
-// toggle (space/x/m) is tapped twice — on, then off — to show both states. Orbit/zoom
-// keys are held for the whole clip. It returns nil when no keys are given.
 func buildScript(keys string, recFrames int) *keyScript {
 	const (
 		intro = 12 // brief pause so the opening state is visible before acting
@@ -394,55 +347,54 @@ func buildScript(keys string, recFrames int) *keyScript {
 
 	slot := intro
 	for _, tok := range toks {
-		switch tok {
-		case "space":
-			toggle(ebiten.KeySpace, slot)
-		case "x":
-			toggle(ebiten.KeyX, slot)
-		case "m":
-			toggle(ebiten.KeyM, slot)
-		case "r":
-			tap(ebiten.KeyR, slot)
-		case "s":
-			tap(ebiten.KeyS, slot)
-		case "tab":
-			tap(ebiten.KeyTab, slot)
-		case "+", "plus":
-			tap(ebiten.KeyEqual, slot)
-		case "-", "minus":
-			tap(ebiten.KeyMinus, slot)
-		case "left":
-			hold(ebiten.KeyArrowLeft)
-		case "right":
-			hold(ebiten.KeyArrowRight)
-		case "up":
-			hold(ebiten.KeyArrowUp)
-		case "down":
-			hold(ebiten.KeyArrowDown)
-		case "shift+up":
-			hold(ebiten.KeyShiftLeft)
-			hold(ebiten.KeyArrowUp)
-		case "shift+down":
-			hold(ebiten.KeyShiftLeft)
-			hold(ebiten.KeyArrowDown)
+		switch {
+		case scriptToggleKeys[tok] != nil:
+			toggle(*scriptToggleKeys[tok], slot)
+		case scriptTapKeys[tok] != nil:
+			tap(*scriptTapKeys[tok], slot)
+		default:
+			for _, k := range scriptHoldKeys[tok] {
+				hold(k)
+			}
 		}
 		slot += gap
 	}
 	return s
 }
 
+var (
+	scriptToggleKeys = map[string]*ebiten.Key{
+		"space": keyPtr(ebiten.KeySpace),
+		"x":     keyPtr(ebiten.KeyX),
+		"m":     keyPtr(ebiten.KeyM),
+	}
+	scriptTapKeys = map[string]*ebiten.Key{
+		"r":     keyPtr(ebiten.KeyR),
+		"s":     keyPtr(ebiten.KeyS),
+		"tab":   keyPtr(ebiten.KeyTab),
+		"+":     keyPtr(ebiten.KeyEqual),
+		"plus":  keyPtr(ebiten.KeyEqual),
+		"-":     keyPtr(ebiten.KeyMinus),
+		"minus": keyPtr(ebiten.KeyMinus),
+	}
+	scriptHoldKeys = map[string][]ebiten.Key{
+		"left":       {ebiten.KeyArrowLeft},
+		"right":      {ebiten.KeyArrowRight},
+		"up":         {ebiten.KeyArrowUp},
+		"down":       {ebiten.KeyArrowDown},
+		"shift+up":   {ebiten.KeyShiftLeft, ebiten.KeyArrowUp},
+		"shift+down": {ebiten.KeyShiftLeft, ebiten.KeyArrowDown},
+	}
+)
+
+func keyPtr(k ebiten.Key) *ebiten.Key { return &k }
+
 func (g *gameState) Update() error {
-	if g.rec != nil {
-		g.frame++
-		if g.rec.len() >= g.recFrames {
-			if !g.recSaved {
-				if err := g.rec.save(g.recPath); err != nil {
-					return err
-				}
-				g.recSaved = true
-			}
-			return ebiten.Termination
+	if stop, err := g.tickRecording(); stop {
+		if err != nil {
+			return err
 		}
+		return ebiten.Termination
 	}
 
 	for _, v := range g.views {
@@ -450,41 +402,69 @@ func (g *gameState) Update() error {
 	}
 
 	shift := g.keyDown(ebiten.KeyShiftLeft) || g.keyDown(ebiten.KeyShiftRight)
+	g.handleOrbit(shift)
+	g.handleZoom(shift)
+	g.handleKeys()
 
-	// Orbit (only while folded up); the view locks and faces the net once unfolded.
-	if g.unfold < 0.5 {
-		if g.keyDown(ebiten.KeyArrowLeft) {
-			g.yaw -= orbitSpeed
+	for _, v := range g.views {
+		v.advanceSolve(g.unfold)
+	}
+
+	return g.syncLink()
+}
+
+func (g *gameState) tickRecording() (stop bool, err error) {
+	if g.rec == nil {
+		return false, nil
+	}
+	g.frame++
+	if g.rec.len() < g.recFrames {
+		return false, nil
+	}
+	if !g.recSaved {
+		if err := g.rec.save(g.recPath); err != nil {
+			return true, err
 		}
-		if g.keyDown(ebiten.KeyArrowRight) {
-			g.yaw += orbitSpeed
-		}
-		if !shift {
-			if g.keyDown(ebiten.KeyArrowUp) {
-				g.pitch -= orbitSpeed
-			}
-			if g.keyDown(ebiten.KeyArrowDown) {
-				g.pitch += orbitSpeed
-			}
-		}
-		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-			x, y := ebiten.CursorPosition()
-			if g.dragging {
-				g.yaw += float32(x-g.lastX) * 0.01
-				g.pitch += float32(y-g.lastY) * 0.01
-			}
-			g.lastX, g.lastY, g.dragging = x, y, true
-		} else {
-			g.dragging = false
-		}
-		g.pitch = clamp(g.pitch, -1.45, 1.45)
-	} else {
+		g.recSaved = true
+	}
+	return true, nil
+}
+
+func (g *gameState) handleOrbit(shift bool) {
+	if g.unfold >= 0.5 {
 		g.dragging = false
 		g.yaw += clamp(-g.yaw, -0.08, 0.08)
 		g.pitch += clamp(-g.pitch, -0.08, 0.08)
+		return
 	}
+	if g.keyDown(ebiten.KeyArrowLeft) {
+		g.yaw -= orbitSpeed
+	}
+	if g.keyDown(ebiten.KeyArrowRight) {
+		g.yaw += orbitSpeed
+	}
+	if !shift {
+		if g.keyDown(ebiten.KeyArrowUp) {
+			g.pitch -= orbitSpeed
+		}
+		if g.keyDown(ebiten.KeyArrowDown) {
+			g.pitch += orbitSpeed
+		}
+	}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		x, y := ebiten.CursorPosition()
+		if g.dragging {
+			g.yaw += float32(x-g.lastX) * 0.01
+			g.pitch += float32(y-g.lastY) * 0.01
+		}
+		g.lastX, g.lastY, g.dragging = x, y, true
+	} else {
+		g.dragging = false
+	}
+	g.pitch = clamp(g.pitch, -1.45, 1.45)
+}
 
-	// Zoom: mouse wheel, or Shift+Up/Down.
+func (g *gameState) handleZoom(shift bool) {
 	if _, dy := ebiten.Wheel(); dy != 0 {
 		g.zoom *= float32(math.Pow(1.12, dy))
 	}
@@ -497,7 +477,9 @@ func (g *gameState) Update() error {
 		}
 	}
 	g.zoom = clamp(g.zoom, 0.5, 3)
+}
 
+func (g *gameState) handleKeys() {
 	if g.keyTapped(ebiten.KeySpace) {
 		if g.unfoldTo == 0 {
 			g.unfoldTo = 1
@@ -530,8 +512,10 @@ func (g *gameState) Update() error {
 	if g.keyTapped(ebiten.KeyM) {
 		g.showMoves = !g.showMoves
 	}
-	// "+" adds a cube, "-" removes one. Coordinated: spawn/close a separate window via the
-	// hub. Otherwise (recording): grow/shrink the in-window grid. "s" changes a cube's solver.
+	g.handleCountKeys()
+}
+
+func (g *gameState) handleCountKeys() {
 	if g.keyTapped(ebiten.KeyEqual) || g.keyTapped(ebiten.KeyKPAdd) {
 		if g.link != nil {
 			g.send(Msg{Type: "add"})
@@ -546,42 +530,38 @@ func (g *gameState) Update() error {
 			g.setCount(len(g.views) - 1)
 		}
 	}
+}
 
-	for _, v := range g.views {
-		v.advanceSolve(g.unfold)
+func (g *gameState) syncLink() error {
+	if g.link == nil {
+		return nil
 	}
-
-	// Coordinated windows: apply inbound shared state/events, then publish local changes.
-	if g.link != nil {
-		for done := false; !done; {
-			select {
-			case m, ok := <-g.link.In:
-				if !ok || m.Type == "quit" {
-					return ebiten.Termination // leader/hub gone, or asked to close
-				}
-				switch m.Type {
-				case "state":
-					g.applyShared(m)
-				case "rescramble":
-					for _, v := range g.views {
-						v.rescramble(v.ctrl.Scramble)
-					}
-				}
-			default:
-				done = true
+	for done := false; !done; {
+		select {
+		case m, ok := <-g.link.In:
+			if !ok || m.Type == "quit" {
+				return ebiten.Termination // leader/hub gone, or asked to close
 			}
+			switch m.Type {
+			case "state":
+				g.applyShared(m)
+			case "rescramble":
+				for _, v := range g.views {
+					v.rescramble(v.ctrl.Scramble)
+				}
+			}
+		default:
+			done = true
 		}
-		if cur := g.shared(); cur != g.lastSent {
-			if g.send(cur) {
-				g.lastSent = cur
-			}
+	}
+	if cur := g.shared(); cur != g.lastSent {
+		if g.send(cur) {
+			g.lastSent = cur
 		}
 	}
 	return nil
 }
 
-// send publishes a message to the hub without blocking the frame; it reports whether the
-// message was accepted. It is a no-op when the window is not coordinated.
 func (g *gameState) send(m Msg) bool {
 	if g.link == nil || g.link.Out == nil {
 		return false
@@ -647,8 +627,6 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 	}
 }
 
-// drawView projects one cube into a cell centred at (cx,cy) with px pixels per world
-// unit. Camera angles, unfold, x-ray and geometry are shared from gameState.
 func (g *gameState) drawView(screen *ebiten.Image, v *cubeView, cx, cy, px float32) {
 	f := v.c.ToFacelets()
 	sinY, cosY := fsincos(g.yaw)
@@ -708,8 +686,6 @@ func (g *gameState) drawView(screen *ebiten.Image, v *cubeView, cx, cy, px float
 	}
 }
 
-// drawMoveList shows the moves played so far, top-right, growing move-by-move as the
-// solve animates. The current move is marked; long lists scroll so it stays visible.
 func (g *gameState) drawMoveList(screen *ebiten.Image, v *cubeView) {
 	if len(v.moves) == 0 {
 		return
@@ -739,8 +715,6 @@ func (g *gameState) drawMoveList(screen *ebiten.Image, v *cubeView) {
 	}
 }
 
-// Layout follows the window so the user can resize it and the scene reflows. While
-// recording it returns a fixed size so every captured GIF frame has the same dimensions.
 func (g *gameState) Layout(outsideW, outsideH int) (int, int) {
 	if g.rec == nil && outsideW > 0 && outsideH > 0 {
 		g.w, g.h = outsideW, outsideH
@@ -748,9 +722,6 @@ func (g *gameState) Layout(outsideW, outsideH int) (int, int) {
 	return g.w, g.h
 }
 
-// fitMonitor shrinks a window size to fit within 90% of the primary monitor, preserving
-// aspect ratio, so a large grid never opens bigger than the screen. It is a no-op when the
-// monitor size is unknown or the window already fits.
 func fitMonitor(w, h int) (int, int) {
 	mw, mh := ebiten.Monitor().Size()
 	if mw <= 0 || mh <= 0 {
@@ -770,9 +741,6 @@ func fitMonitor(w, h int) (int, int) {
 	return w, h
 }
 
-// wrapHelp packs help segments into lines no wider than maxWidth pixels (the debug font is
-// a fixed 6px per glyph), joining segments on a line with three spaces. A segment wider
-// than maxWidth on its own is left on its own line.
 func wrapHelp(segs []string, maxWidth int) []string {
 	const glyph = 6
 	const sep = "   "
@@ -833,7 +801,6 @@ func fsincos(a float32) (float32, float32) {
 	return float32(s), float32(c)
 }
 
-// gridDims picks a near-square column/row count for n cells.
 func gridDims(n int) (cols, rows int) {
 	if n <= 1 {
 		return 1, 1
@@ -843,8 +810,6 @@ func gridDims(n int) (cols, rows int) {
 	return cols, rows
 }
 
-// windowSize is the single-cube window for a 1×1 grid, else a grid-sized window capped
-// at maxWin so cells stay legible.
 func windowSize(cols, rows int) (w, h int) {
 	if cols <= 1 && rows <= 1 {
 		return winW, winH
@@ -882,10 +847,8 @@ func newGridView(ctrl Controller, cell Cell) *cubeView {
 	}
 }
 
-// Play opens the visualizer driven by ctrl. It shows a single self-driving cube; "+"/"-"
-// grow and shrink it (an in-window grid while recording, or — when link is non-nil —
-// separate coordinated windows that mirror the camera, x-ray, unfold and move-list).
-func Play(ctrl Controller, link *Link) error {
+func Run(cfg Config) error {
+	ctrl, link := cfg.Controller, cfg.Link
 	g := &gameState{
 		ctrl:  ctrl,
 		link:  link,
@@ -928,5 +891,8 @@ func Play(ctrl Controller, link *Link) error {
 		// run to drain the closed link and terminate).
 		ebiten.SetRunnableOnUnfocused(true)
 	}
-	return ebiten.RunGame(g)
+	if err := ebiten.RunGame(g); err != nil {
+		return fmt.Errorf("run window: %w", err)
+	}
+	return nil
 }

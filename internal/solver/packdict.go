@@ -6,9 +6,6 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// packdict.go is the backward "meet in the middle" lookup from video 1, on the packed
-// state: a breadth-first expansion outward from solved recording each position's exact
-// distance home. A descent that lands on one of these knows it is on a winning path.
 func packedDict(moves []cube.Move, depth int) map[state]int {
 	dist := map[state]int{solved: 0}
 	frontier := []state{solved}
@@ -28,13 +25,8 @@ func packedDict(moves []cube.Move, depth int) map[state]int {
 	return dist
 }
 
-// dictBase outranks any solved-cubie count, so a dictionary hit (a known path home) is
-// always preferred and pulls the descent straight in.
 const dictBase = 1000
 
-// dictSolve walks a dictionary position home, always stepping to a neighbour one move
-// closer to solved (over the full move set, so it can use front/back turns even when
-// the forward search could not).
 func dictSolve(s state, dict map[state]int) []cube.Move {
 	var path []cube.Move
 	for {
@@ -53,8 +45,6 @@ func dictSolve(s state, dict map[state]int) []cube.Move {
 	}
 }
 
-// withLookup wraps an evaluation so a position in the dictionary scores by its (small)
-// distance home; otherwise it falls back to the base evaluation.
 func withLookup(dict map[state]int, fallback stateEval) stateEval {
 	return func(s state) int {
 		if d, ok := dict[s]; ok {
@@ -64,8 +54,6 @@ func withLookup(dict map[state]int, fallback stateEval) stateEval {
 	}
 }
 
-// Cached dictionaries (built once on first use): the full 18-move dictionary used by
-// sandwich and oriented, and the domino-move dictionary used by domino's phase 2.
 var (
 	fullDictOnce sync.Once
 	fullDict     map[state]int

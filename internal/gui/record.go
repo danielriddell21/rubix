@@ -1,11 +1,7 @@
 package gui
 
-// The recorder turns a stream of rendered frames into an animated GIF. It is deliberately
-// free of any build tag and of any Ebiten dependency: it works on plain image.Image
-// values, so it can be unit-tested headlessly. The Ebiten capture path in gui.go feeds it
-// the screen pixels each frame.
-
 import (
+	"fmt"
 	"image"
 	colorpalette "image/color/palette"
 	"image/draw"
@@ -13,15 +9,12 @@ import (
 	"os"
 )
 
-// recorder accumulates downscaled, palettized frames and writes them as a looping GIF.
 type recorder struct {
-	scale  int // integer nearest-neighbour downscale factor
-	delay  int // per-frame delay in 1/100s (100/fps)
+	scale  int
+	delay  int
 	frames []*image.Paletted
 }
 
-// newRecorder makes a recorder that downscales each frame by scale (nearest-neighbour)
-// and plays back at fps frames per second. scale is clamped to >=1 and fps to 1..100.
 func newRecorder(scale, fps int) *recorder {
 	if scale < 1 {
 		scale = 1
@@ -35,8 +28,6 @@ func newRecorder(scale, fps int) *recorder {
 	return &recorder{scale: scale, delay: 100 / fps}
 }
 
-// add captures one frame: an integer nearest-neighbour downscale, then Floyd–Steinberg
-// dithering onto the standard Plan9 256-colour palette.
 func (r *recorder) add(img image.Image) {
 	small := downscale(img, r.scale)
 	p := image.NewPaletted(small.Bounds(), colorpalette.Plan9)
@@ -44,10 +35,8 @@ func (r *recorder) add(img image.Image) {
 	r.frames = append(r.frames, p)
 }
 
-// len reports how many frames have been captured so far.
 func (r *recorder) len() int { return len(r.frames) }
 
-// save writes the captured frames as a single looping animated GIF.
 func (r *recorder) save(path string) error {
 	g := &gif.GIF{LoopCount: 0}
 	for _, f := range r.frames {
@@ -56,17 +45,18 @@ func (r *recorder) save(path string) error {
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("create %s: %w", path, err)
 	}
 	if err := gif.EncodeAll(f, g); err != nil {
 		_ = f.Close()
-		return err
+		return fmt.Errorf("encode gif: %w", err)
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", path, err)
+	}
+	return nil
 }
 
-// downscale shrinks src by an integer factor using nearest-neighbour sampling, always
-// returning a freshly owned *image.RGBA (a factor of 1 yields a same-size copy).
 func downscale(src image.Image, factor int) *image.RGBA {
 	if factor < 1 {
 		factor = 1

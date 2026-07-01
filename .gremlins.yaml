@@ -1,13 +1,11 @@
-# go-gremlins mutation testing config. `gremlins unleash` fails the build if too few
-# mutants are killed, catching tests that pass without really asserting behaviour.
+silent: false
+
 unleash:
   threshold:
-    efficacy: 50
-    mutant-coverage: 50
-
-# The CLI entrypoint is glue (flag parsing / dispatch); exclude it from mutation.
-exclude-files:
-  - "cmd/.*"
+    efficacy: 50        # ≥50% of tested mutants must be killed
+    mutant-coverage: 50 # skip mutants in code with <50% line coverage
+  exclude-files:
+    - "cmd/.*"
 
 mutants:
   arithmetic-base:
@@ -18,7 +16,17 @@ mutants:
     enabled: true
   increment-decrement:
     enabled: true
+  invert-assignments:
+    enabled: false
+  invert-bitwise:
+    enabled: false
+  invert-bwassign:
+    enabled: false
   invert-negatives:
     enabled: true
   invert-logical:
     enabled: true
+  invert-loopctrl:
+    enabled: false
+  remove-self-assignments:
+    enabled: false

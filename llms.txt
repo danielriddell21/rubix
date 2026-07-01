@@ -1,0 +1,28 @@
+# rubix
+
+> A dependency-free Go Rubik's cube library and solver CLI: model the cube as data, apply moves, parse facelet strings and notation, and solve it with several strategies.
+
+The cube library is importable as `github.com/danielriddell21/rubix/pkg/cube`. It has no external dependencies. The `rubix` command (`cmd/rubix`) exposes solving, scrambling, verification, and an optional self-driving visualizer (`-tags ebiten`).
+
+Core library API:
+
+```go
+type Cube struct{ /* ... */ }
+
+func Solved() Cube
+func FromFacelets(f Facelets) (Cube, error)
+func ParseFacelets(s string) (Facelets, error)
+func (c Cube) Applied(ms ...Move) Cube
+func (c Cube) IsSolved() bool
+
+type Move uint8
+func ParseMoves(s string) ([]Move, error)
+func InverseSeq(ms []Move) []Move
+```
+
+Solvers live in `internal/solver` and are selected by name on the CLI (`rubix solve --strategy <name>`; `rubix solvers` lists them). A cube can be built from a 54-character facelet string (URFDLB) or scanned from a LEGO EV3 robot.
+
+## Docs
+
+- [pkg.go.dev reference](https://pkg.go.dev/github.com/danielriddell21/rubix/pkg/cube)
+- [README](https://github.com/danielriddell21/rubix/blob/trunk/README.md)

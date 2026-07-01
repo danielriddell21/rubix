@@ -1,9 +1,5 @@
 //go:build !ebiten
 
-// The recorder is tag-free, so it is exercised in the default (headless) build. Under the
-// ebiten tag the gui package pulls in Ebiten's init, which needs a display, so the test
-// stays out of that build — the recorder code under test is identical either way.
-
 package gui
 
 import (
@@ -15,7 +11,6 @@ import (
 	"testing"
 )
 
-// solidRGBA returns a w×h image filled with c.
 func solidRGBA(w, h int, c color.RGBA) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {

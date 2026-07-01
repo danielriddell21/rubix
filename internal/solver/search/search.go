@@ -1,6 +1,3 @@
-// Package search provides the shared solving engine used by the cube solvers:
-// iterative-deepening DFS, IDA*, greedy best-first and bidirectional (meet in the
-// middle) search over cube states, plus pruning-table construction and caching.
 package search
 
 import (
@@ -9,14 +6,12 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// Goal reports whether a cube state satisfies the search target.
 type Goal func(cube.Cube) bool
 
-// Heuristic estimates the number of moves remaining from a state. It must never
-// overestimate (be admissible) for IDA* to return optimal solutions.
 type Heuristic func(cube.Cube) int
 
-// AllMoves is the full set of 18 outer-face turns.
+const unbounded = 1 << 30
+
 var AllMoves = func() []cube.Move {
 	ms := make([]cube.Move, cube.NumMoves)
 	for i := range ms {
@@ -25,16 +20,12 @@ var AllMoves = func() []cube.Move {
 	return ms
 }()
 
-// DominoMoves is the phase-2 move set: ⟨U, D, R2, L2, F2, B2⟩.
 var DominoMoves = []cube.Move{
 	cube.U, cube.U2, cube.Up,
 	cube.D, cube.D2, cube.Dp,
 	cube.R2, cube.L2, cube.F2, cube.B2,
 }
 
-// redundant reports whether playing cur right after prev is wasteful: another turn
-// of the same face, or a turn of the opposite face in the "wrong" order (to break
-// the symmetry of commuting moves like R and L).
 func redundant(prev, cur cube.Move, hasPrev bool) bool {
 	if !hasPrev {
 		return false
@@ -50,13 +41,10 @@ func redundant(prev, cur cube.Move, hasPrev bool) bool {
 	return false
 }
 
-// IDDFS performs uninformed iterative-deepening DFS up to maxDepth. It returns the
-// solution moves, the number of nodes expanded, and whether a solution was found.
 func IDDFS(start cube.Cube, goal Goal, moves []cube.Move, maxDepth int) ([]cube.Move, uint64, bool) {
 	return IDAStar(start, goal, moves, func(cube.Cube) int { return 0 }, maxDepth)
 }
 
-// IDAStar performs iterative-deepening A* search.
 func IDAStar(start cube.Cube, goal Goal, moves []cube.Move, h Heuristic, maxDepth int) ([]cube.Move, uint64, bool) {
 	var nodes uint64
 	path := make([]cube.Move, 0, maxDepth)
@@ -71,7 +59,9 @@ func IDAStar(start cube.Cube, goal Goal, moves []cube.Move, h Heuristic, maxDept
 		if goal(c) {
 			return true, f
 		}
-		next := bound + 1<<30
+		// Track the smallest f that exceeded the current bound; seed it above
+		// any real g+h so the first exceeding child wins the min.
+		next := unbounded
 		for _, m := range moves {
 			if redundant(prev, m, hasPrev) {
 				continue
@@ -105,7 +95,6 @@ func IDAStar(start cube.Cube, goal Goal, moves []cube.Move, h Heuristic, maxDept
 	return nil, nodes, false
 }
 
-// node for the greedy best-first priority queue.
 type gNode struct {
 	c    cube.Cube
 	path []cube.Move
@@ -120,9 +109,6 @@ func (p pq) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p *pq) Push(x any)        { *p = append(*p, x.(gNode)) }
 func (p *pq) Pop() any          { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
 
-// Greedy performs greedy best-first search: it always expands the open state with
-// the lowest heuristic value, ignoring path cost. It is fast but non-optimal and
-// gives up after nodeLimit expansions. Returns the solution, nodes expanded, ok.
 func Greedy(start cube.Cube, goal Goal, moves []cube.Move, h Heuristic, nodeLimit uint64) ([]cube.Move, uint64, bool) {
 	if goal(start) {
 		return nil, 0, true
@@ -158,76 +144,65 @@ func Greedy(start cube.Cube, goal Goal, moves []cube.Move, h Heuristic, nodeLimi
 	return nil, nodes, false
 }
 
-// Bidirectional performs meet-in-the-middle BFS from start (forward) and target
-// (backward), expanding both frontiers until they intersect. maxDepth bounds the
-// total solution length. Returns the solution moves, states explored, ok.
 func Bidirectional(start, target cube.Cube, moves []cube.Move, maxDepth int) ([]cube.Move, uint64, bool) {
 	if start == target {
 		return nil, 0, true
 	}
-	type entry struct {
-		path []cube.Move
-	}
-	fwd := map[cube.Cube]entry{start: {}}
-	bwd := map[cube.Cube]entry{target: {}}
+	fwd := map[cube.Cube]biEntry{start: {}}
+	bwd := map[cube.Cube]biEntry{target: {}}
 	fFrontier := []cube.Cube{start}
 	bFrontier := []cube.Cube{target}
 	var nodes uint64
 
-	join := func(fwdPath, bwdPath []cube.Move) []cube.Move {
-		sol := append([]cube.Move(nil), fwdPath...)
-		// Backward path was built from target; reverse and invert to walk to target.
-		sol = append(sol, cube.InverseSeq(bwdPath)...)
-		return sol
-	}
-
 	for depth := 0; depth < maxDepth; depth++ {
 		// Expand the smaller frontier for efficiency.
-		expandFwd := len(fFrontier) <= len(bFrontier)
-		if expandFwd {
-			var nextF []cube.Cube
-			for _, c := range fFrontier {
-				e := fwd[c]
-				for _, m := range moves {
-					nc := c
-					nc.Apply(m)
-					if _, ok := fwd[nc]; ok {
-						continue
-					}
-					nodes++
-					np := append(append([]cube.Move(nil), e.path...), m)
-					if be, ok := bwd[nc]; ok {
-						return join(np, be.path), nodes, true
-					}
-					fwd[nc] = entry{path: np}
-					nextF = append(nextF, nc)
-				}
-			}
-			fFrontier = nextF
+		var sol []cube.Move
+		var met bool
+		if len(fFrontier) <= len(bFrontier) {
+			fFrontier, sol, met = expandFrontier(fFrontier, fwd, bwd, moves, true, &nodes)
 		} else {
-			var nextB []cube.Cube
-			for _, c := range bFrontier {
-				e := bwd[c]
-				for _, m := range moves {
-					nc := c
-					nc.Apply(m)
-					if _, ok := bwd[nc]; ok {
-						continue
-					}
-					nodes++
-					np := append(append([]cube.Move(nil), e.path...), m)
-					if fe, ok := fwd[nc]; ok {
-						return join(fe.path, np), nodes, true
-					}
-					bwd[nc] = entry{path: np}
-					nextB = append(nextB, nc)
-				}
-			}
-			bFrontier = nextB
+			bFrontier, sol, met = expandFrontier(bFrontier, bwd, fwd, moves, false, &nodes)
+		}
+		if met {
+			return sol, nodes, true
 		}
 		if len(fFrontier) == 0 || len(bFrontier) == 0 {
 			break
 		}
 	}
 	return nil, nodes, false
+}
+
+type biEntry struct {
+	path []cube.Move
+}
+
+func expandFrontier(frontier []cube.Cube, own, other map[cube.Cube]biEntry, moves []cube.Move, forward bool, nodes *uint64) ([]cube.Cube, []cube.Move, bool) {
+	var next []cube.Cube
+	for _, c := range frontier {
+		e := own[c]
+		for _, m := range moves {
+			nc := c
+			nc.Apply(m)
+			if _, ok := own[nc]; ok {
+				continue
+			}
+			*nodes++
+			np := append(append([]cube.Move(nil), e.path...), m)
+			if oe, ok := other[nc]; ok {
+				if forward {
+					return next, joinPaths(np, oe.path), true
+				}
+				return next, joinPaths(oe.path, np), true
+			}
+			own[nc] = biEntry{path: np}
+			next = append(next, nc)
+		}
+	}
+	return next, nil, false
+}
+
+func joinPaths(fwdPath, bwdPath []cube.Move) []cube.Move {
+	sol := append([]cube.Move(nil), fwdPath...)
+	return append(sol, cube.InverseSeq(bwdPath)...)
 }

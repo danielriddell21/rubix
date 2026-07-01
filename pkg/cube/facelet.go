@@ -115,53 +115,19 @@ func (f Facelets) String() string {
 // the stickers do not describe a legal cube.
 func FromFacelets(f Facelets) (Cube, error) {
 	var c Cube
-	// Corners: orientation is the index of the U/D facelet.
 	for i := range 8 {
-		var ori int
-		for ori = range 3 {
-			col := f[cornerFacelet[i][ori]]
-			if col == ColU || col == ColD {
-				break
-			}
-		}
-		col1 := f[cornerFacelet[i][(ori+1)%3]]
-		col2 := f[cornerFacelet[i][(ori+2)%3]]
-		found := false
-		for j := range 8 {
-			if col1 == cornerColor[j][1] && col2 == cornerColor[j][2] {
-				c.CornerPos[i] = uint8(j)
-				c.CornerOri[i] = uint8(ori)
-				found = true
-				break
-			}
-		}
-		if !found {
+		pos, ori, ok := matchCorner(f, i)
+		if !ok {
 			return c, fmt.Errorf("corner slot %d has no matching cubie", i)
 		}
+		c.CornerPos[i], c.CornerOri[i] = pos, ori
 	}
-	// Edges.
 	for i := range 12 {
-		a := f[edgeFacelet[i][0]]
-		b := f[edgeFacelet[i][1]]
-		found := false
-		for j := range 12 {
-			switch {
-			case a == edgeColor[j][0] && b == edgeColor[j][1]:
-				c.EdgePos[i] = uint8(j)
-				c.EdgeOri[i] = 0
-				found = true
-			case a == edgeColor[j][1] && b == edgeColor[j][0]:
-				c.EdgePos[i] = uint8(j)
-				c.EdgeOri[i] = 1
-				found = true
-			}
-			if found {
-				break
-			}
-		}
-		if !found {
+		pos, ori, ok := matchEdge(f, i)
+		if !ok {
 			return c, fmt.Errorf("edge slot %d has no matching cubie", i)
 		}
+		c.EdgePos[i], c.EdgeOri[i] = pos, ori
 	}
 	if err := c.Validate(); err != nil {
 		return c, err
@@ -169,8 +135,47 @@ func FromFacelets(f Facelets) (Cube, error) {
 	return c, nil
 }
 
-// ParseFacelets parses a 54-character string in the URFDLB scheme (face letters or
-// the equivalent default colours W/R/G/Y/O/B). Whitespace is ignored.
+// matchCorner resolves corner slot i to its cubie index and orientation from the
+// facelets (orientation is the index of the U/D sticker), reporting false if no
+// cubie matches.
+func matchCorner(f Facelets, i int) (pos, ori uint8, ok bool) {
+	var o int
+	for o = range 3 {
+		col := f[cornerFacelet[i][o]]
+		if col == ColU || col == ColD {
+			break
+		}
+	}
+	col1 := f[cornerFacelet[i][(o+1)%3]]
+	col2 := f[cornerFacelet[i][(o+2)%3]]
+	for j := range 8 {
+		if col1 == cornerColor[j][1] && col2 == cornerColor[j][2] {
+			return uint8(j), uint8(o), true
+		}
+	}
+	return 0, 0, false
+}
+
+// matchEdge resolves edge slot i to its cubie index and orientation from the
+// facelets, reporting false if no cubie matches.
+func matchEdge(f Facelets, i int) (pos, ori uint8, ok bool) {
+	a := f[edgeFacelet[i][0]]
+	b := f[edgeFacelet[i][1]]
+	for j := range 12 {
+		switch {
+		case a == edgeColor[j][0] && b == edgeColor[j][1]:
+			return uint8(j), 0, true
+		case a == edgeColor[j][1] && b == edgeColor[j][0]:
+			return uint8(j), 1, true
+		}
+	}
+	return 0, 0, false
+}
+
+// ParseFacelets parses a 54-character string in the URFDLB scheme. Each facelet
+// may be given as a face letter (U, R, F, D, L, B) or the equivalent default
+// colour (W, R, G, Y, O, B); both are accepted case-insensitively. Whitespace is
+// ignored.
 func ParseFacelets(s string) (Facelets, error) {
 	var f Facelets
 	clean := strings.Map(func(r rune) rune {

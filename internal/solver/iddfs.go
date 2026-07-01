@@ -2,9 +2,6 @@ package solver
 
 import "github.com/danielriddell21/rubix/pkg/cube"
 
-// iddfsSolver is the domino solver with the fixed-depth search replaced by iterative
-// deepening: it deepens the two-phase search until the goal (the domino state, then the
-// solution) is found. Reliable, the first of video 2's search optimisations.
 type iddfsSolver struct{}
 
 func (iddfsSolver) Name() string     { return "iddfs" }

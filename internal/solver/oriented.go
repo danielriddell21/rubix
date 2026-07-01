@@ -2,11 +2,6 @@ package solver
 
 import "github.com/danielriddell21/rubix/pkg/cube"
 
-// orientedSolver first orients all twelve edges (only front/back quarter turns can flip
-// an edge, so once they are all oriented those turns are no longer needed). It then
-// finishes with the sandwich approach but with front and back turns removed from the
-// move set — a smaller set that lets it search and look up two moves deeper. The video
-// reaches ~99.8% this way.
 type orientedSolver struct{}
 
 func (orientedSolver) Name() string { return "oriented" }
@@ -18,7 +13,7 @@ func (orientedSolver) Solve(c cube.Cube) (Result, error) {
 	return timed("oriented", c, func(c cube.Cube) ([]cube.Move, bool, uint64, error) {
 		ps := pack(c)
 		// Phase 1: orient every edge.
-		p1, n1 := descend(ps, state.orientedEdgeCount, edgesAllOriented, noTerminal, allMoves, 6, 7, stepLimit)
+		p1, n1 := descend(ps, state.orientedEdgeCount, edgesAllOriented, noTerminal, allMoves, 7)
 		mid := ps.applyAll(p1)
 		if !edgesAllOriented(mid) {
 			return p1, false, n1, nil
@@ -29,7 +24,7 @@ func (orientedSolver) Solve(c cube.Cube) (Result, error) {
 		dict := fullLookup()
 		reach := inLookup(dict)
 		eval := withLookup(dict, state.solvedCount)
-		p2, n2 := descend(mid, eval, func(s state) bool { return reach(s) }, reach, orientedMoves, 6, 7, stepLimit)
+		p2, n2 := descend(mid, eval, func(s state) bool { return reach(s) }, reach, orientedMoves, 7)
 		hit := mid.applyAll(p2)
 		if _, ok := dict[hit]; !ok {
 			return append(p1, p2...), false, n1 + n2, nil // never reached the dictionary

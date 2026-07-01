@@ -1,6 +1,3 @@
-// Package solver holds the cube-solving strategies, exposed through a common
-// interface and an ordered registry that mirrors the two source videos' narrative:
-// greedy → sandwich → oriented → cfop → domino → iddfs → idastar → prune → multi.
 package solver
 
 import (
@@ -10,16 +7,14 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// Result is the outcome of a solve.
 type Result struct {
-	Moves    []cube.Move   // moves played; when Solved, applying them solves the cube
-	Strategy string        // solver name
-	Nodes    uint64        // search nodes expanded (0 if not search-based)
-	Elapsed  time.Duration // wall-clock solve time
-	Solved   bool          // false when the solver legitimately gave up (faithful to the videos)
+	Moves    []cube.Move
+	Strategy string
+	Nodes    uint64
+	Elapsed  time.Duration
+	Solved   bool
 }
 
-// Solver turns a scrambled cube into a sequence of moves that solves it.
 type Solver interface {
 	Name() string
 	Describe() string
@@ -39,7 +34,6 @@ func register(s Solver) {
 	byName[s.Name()] = s
 }
 
-// Registration order is the on-screen order across both videos.
 func init() {
 	register(greedySolver{})
 	register(sandwichSolver{})
@@ -52,10 +46,8 @@ func init() {
 	register(multiSolver{})
 }
 
-// All returns every solver in video order.
 func All() []Solver { return ordered }
 
-// Get returns the named solver.
 func Get(name string) (Solver, error) {
 	s, ok := byName[name]
 	if !ok {
@@ -64,7 +56,6 @@ func Get(name string) (Solver, error) {
 	return s, nil
 }
 
-// Names returns every solver name in video order.
 func Names() []string {
 	out := make([]string, len(ordered))
 	for i, s := range ordered {
@@ -73,9 +64,6 @@ func Names() []string {
 	return out
 }
 
-// timed runs solve and stamps the result's strategy and elapsed time. The solve
-// function reports whether it actually solved the cube; a solver returning solved=false
-// has legitimately given up (not an error). Any solution it claims is sanity-checked.
 func timed(name string, c cube.Cube, solve func(cube.Cube) (moves []cube.Move, solved bool, nodes uint64, err error)) (Result, error) {
 	start := time.Now()
 	moves, solved, nodes, err := solve(c)

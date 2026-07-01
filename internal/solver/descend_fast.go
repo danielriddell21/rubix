@@ -7,36 +7,23 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// descend_fast.go is the greedy best-first search from video 1, running on the packed
-// state so it is fast enough to search deep. Each step explores every move path up to a
-// depth (the first moves searched in parallel), scoring positions as
-// evaluation*scoreScale − depth (moves only a tie-breaker), and plays the first move of
-// the highest-scoring path — escalating the depth when it can't improve, giving up if
-// even the deepest search can't.
-
 const (
 	scoreScale = 1000
 	goalBonus  = 1 << 30
 )
 
-// stateEval evaluates a packed position; higher is closer to the goal.
 type stateEval func(state) int
 
-// terminal reports whether the search should stop descending at a position — used for
-// dictionary hits, where the path home is already known so there is no point searching
-// deeper. noTerminal never stops.
 type terminal func(state) bool
 
 func noTerminal(state) bool { return false }
 
-// inLookup returns a terminal predicate that stops at any position in the dictionary.
 func inLookup(dict map[state]int) terminal {
 	return func(s state) bool { _, ok := dict[s]; return ok }
 }
 
-// descend plays moves until isGoal holds or the search is stuck. moves is the move set
-// (all 18 or a restricted subset). It returns the moves played and positions visited.
-func descend(start state, eval stateEval, isGoal func(state) bool, stop terminal, moves []cube.Move, minDepth, maxDepth, stepLimit int) ([]cube.Move, uint64) {
+func descend(start state, eval stateEval, isGoal func(state) bool, stop terminal, moves []cube.Move, maxDepth int) ([]cube.Move, uint64) {
+	const minDepth = 6
 	cur := start
 	var sol []cube.Move
 	var nodes uint64
@@ -66,8 +53,6 @@ func descend(start state, eval stateEval, isGoal func(state) bool, stop terminal
 	return sol, nodes
 }
 
-// bestFirst searches each legal first move in parallel and returns the highest subtree
-// score and the first move achieving it.
 func bestFirst(start state, eval stateEval, isGoal func(state) bool, stop terminal, moves []cube.Move, depth int, nodes *uint64) (int, cube.Move) {
 	type res struct {
 		score int

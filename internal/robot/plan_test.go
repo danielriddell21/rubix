@@ -6,8 +6,6 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// recover replays robot primitives and reconstructs the outer-face turns they
-// perform, mirroring the planner's orientation bookkeeping.
 func recoverMoves(prims []Primitive) []cube.Move {
 	orient := [6]int{slotU, slotR, slotF, slotD, slotL, slotB}
 	flip := func() {

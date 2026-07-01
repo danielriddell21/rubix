@@ -11,15 +11,6 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// ev3_scan.go reads the physical cube with the colour sensor. The sensor is mounted
-// on a swing arm; to scan a face the cube is presented (via flips and rotations) and
-// the sensor samples the nine stickers while the turntable indexes them. Raw RGB is
-// matched to the calibrated reference colour of each centre.
-//
-// The geometry here follows the standard MindCub3r rig; Calibrate must be run once to
-// capture the six reference colours before Scan.
-
-// reference RGB for each face colour, filled by Calibrate.
 type refColor struct {
 	r, g, b float64
 	set     bool
@@ -43,7 +34,6 @@ func (e *EV3) readRGB() (r, g, b float64, err error) {
 	return vals[0], vals[1], vals[2], nil
 }
 
-// classify returns the calibrated colour nearest the sampled RGB.
 func classify(r, g, b float64) cube.Color {
 	best := cube.Color(0)
 	bestD := math.Inf(1)
@@ -60,9 +50,6 @@ func classify(r, g, b float64) cube.Color {
 	return best
 }
 
-// Calibrate captures the six centre colours as references. The caller presents each
-// centre to the sensor in URFDLB order when prompted; here we sample whatever centre
-// is currently under the sensor for each presented face.
 func (e *EV3) Calibrate() error {
 	for f := range 6 {
 		if err := e.presentFace(f); err != nil {
@@ -77,7 +64,6 @@ func (e *EV3) Calibrate() error {
 	return e.Home()
 }
 
-// Scan reads all six faces into a facelet model.
 func (e *EV3) Scan() (cube.Facelets, error) {
 	for f := range references {
 		if !references[f].set {
@@ -103,8 +89,6 @@ func (e *EV3) Scan() (cube.Facelets, error) {
 	return f, e.Home()
 }
 
-// presentFace orients the cube so the requested face (U,R,F,D,L,B) is under the
-// sensor, using the same flip/rotate primitives as solving.
 func (e *EV3) presentFace(face int) error {
 	switch face {
 	case 0: // U — already up at rest
@@ -132,8 +116,6 @@ func (e *EV3) presentFace(face int) error {
 
 var faceTurn = map[int]int{1: 1, 4: -1, 5: 2}
 
-// indexSticker positions the sensor over sticker n (0..8) of the presented face by
-// small turntable indexes; the swing arm covers centre vs edge vs corner rings.
 func (e *EV3) indexSticker(n int) error {
 	if n == 0 {
 		return nil // centre

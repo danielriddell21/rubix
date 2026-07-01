@@ -11,8 +11,6 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// TestDiagTiming reports each solver's solve rate, average move count and time over a
-// batch of full random scrambles. Gated behind DIAG so it does not run normally.
 func TestDiagTiming(t *testing.T) {
 	if os.Getenv("DIAG") == "" {
 		t.Skip("set DIAG=1")

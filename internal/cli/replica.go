@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -11,12 +10,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/danielriddell21/rubix/internal/solver"
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// replicaJob is one cube to solve: a scramble (shared across strategies for a given
-// cube index) paired with the strategy to solve it.
 type replicaJob struct {
 	index    int
 	seed     int64
@@ -24,69 +23,80 @@ type replicaJob struct {
 	scramble cube.Cube
 }
 
-// replicaResult pairs a job with its outcome.
 type replicaResult struct {
 	job replicaJob
 	res solver.Result
 	err error
 }
 
-// cmdReplica solves many cubes at once and compares them. Two axes, both via flags:
-// -count N gives N distinct scrambles; -strategies / -compare solve each scramble with
-// several solvers. They compose into a count×strategy matrix. Screen-only: there is no
-// -execute (you'd need one robot per cube).
-func cmdReplica(args []string, compareDefault bool) error {
-	fs := flag.NewFlagSet("replica", flag.ContinueOnError)
-	count := fs.Int("count", 1, "number of cubes (distinct scrambles)")
-	strategies := fs.String("strategies", "", `comma-separated solvers, or "all" (default: prune, or all with -compare)`)
-	compare := fs.Bool("compare", compareDefault, "solve each scramble with every solver")
-	seed := fs.Int64("seed", 0, "base seed; cube i uses seed+i (0 = random each run)")
-	n := fs.Int("n", 25, "scramble length (moves)")
-	format, output := addFormatFlags(fs)
-	if err := fs.Parse(args); err != nil {
-		return err
+func replicaCmd(use string, compareDefault bool) *cobra.Command {
+	var (
+		count      int
+		strategies string
+		compare    bool
+		seed       int64
+		n          int
+		fmtOpts    formatOpts
+	)
+	short := "Solve many cubes at once and compare"
+	if use == "compare" {
+		short = "Solve each scramble with every solver (replica --compare)"
 	}
-	if err := validFormat(*format); err != nil {
-		return err
-	}
-	if *count < 1 {
-		return fmt.Errorf("-count must be at least 1")
-	}
+	cmd := &cobra.Command{
+		Use:          use,
+		Short:        short,
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validFormat(fmtOpts.format); err != nil {
+				return err
+			}
+			if count < 1 {
+				return fmt.Errorf("--count must be at least 1")
+			}
 
-	names, err := resolveStrategies(*strategies, *compare)
-	if err != nil {
-		return err
-	}
+			names, err := resolveStrategies(strategies, compare)
+			if err != nil {
+				return err
+			}
 
-	// One scramble per cube index, one job per strategy (so a comparison row solves
-	// the same scramble with every solver).
-	jobs := make([]replicaJob, 0, *count*len(names))
-	for i := range *count {
-		s := *seed + int64(i)
-		if *seed == 0 {
-			s = int64(rand.Uint64())
-		}
-		scr := cube.ScrambledCube(*n, s)
-		for _, name := range names {
-			jobs = append(jobs, replicaJob{index: i, seed: s, strategy: name, scramble: scr})
-		}
-	}
+			// One scramble per cube index, one job per strategy (so a comparison row
+			// solves the same scramble with every solver).
+			jobs := make([]replicaJob, 0, count*len(names))
+			for i := range count {
+				s := seed + int64(i)
+				if seed == 0 {
+					s = int64(rand.Uint64())
+				}
+				scr := cube.ScrambledCube(n, s)
+				for _, name := range names {
+					jobs = append(jobs, replicaJob{index: i, seed: s, strategy: name, scramble: scr})
+				}
+			}
 
-	if err := warmTables(); err != nil {
-		return err
+			if err := warmTables(); err != nil {
+				return err
+			}
+			results := solveBatch(jobs)
+			if fmtOpts.format == "text" {
+				return withOutput(fmtOpts.output, func(w io.Writer) error {
+					printReplicaTable(w, results)
+					return nil
+				})
+			}
+			return renderReplica(fmtOpts.format, fmtOpts.output, buildReplicaOutput(results))
+		},
 	}
-	results := solveBatch(jobs)
-	if *format == "text" {
-		return withOutput(*output, func(w io.Writer) error {
-			printReplicaTable(w, results)
-			return nil
-		})
-	}
-	return renderReplica(*format, *output, buildReplicaOutput(results))
+	f := cmd.Flags()
+	f.IntVar(&count, "count", 1, "number of cubes (distinct scrambles)")
+	f.StringVar(&strategies, "strategies", "", `comma-separated solvers, or "all" (default: prune, or all with --compare)`)
+	f.BoolVar(&compare, "compare", compareDefault, "solve each scramble with every solver")
+	f.Int64Var(&seed, "seed", 0, "base seed; cube i uses seed+i (0 = random each run)")
+	f.IntVar(&n, "n", 25, "scramble length (moves)")
+	fmtOpts.register(f)
+	return cmd
 }
 
-// buildReplicaOutput converts solve results into the structured form used by the JSON and
-// CSV renderers, mirroring the totals printReplicaTable computes for the text table.
 func buildReplicaOutput(results []replicaResult) replicaOutput {
 	out := replicaOutput{Results: make([]replicaRow, 0, len(results))}
 	solved, totalMoves := 0, 0
@@ -115,7 +125,6 @@ func buildReplicaOutput(results []replicaResult) replicaOutput {
 	return out
 }
 
-// resolveStrategies turns the -strategies/-compare flags into a validated solver list.
 func resolveStrategies(list string, compare bool) ([]string, error) {
 	if list == "" {
 		if compare {
@@ -133,7 +142,7 @@ func resolveStrategies(list string, compare bool) ([]string, error) {
 			continue
 		}
 		if _, err := solver.Get(name); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get solver %q: %w", name, err)
 		}
 		names = append(names, name)
 	}
@@ -143,9 +152,6 @@ func resolveStrategies(list string, compare bool) ([]string, error) {
 	return names, nil
 }
 
-// solveBatch runs every job concurrently (bounded by CPU count) and returns results in
-// input order. It mirrors the semaphore+WaitGroup pattern in solver/descend_fast.go;
-// writing out[i] by index needs no lock.
 func solveBatch(jobs []replicaJob) []replicaResult {
 	out := make([]replicaResult, len(jobs))
 	var wg sync.WaitGroup
@@ -169,7 +175,6 @@ func solveBatch(jobs []replicaJob) []replicaResult {
 	return out
 }
 
-// printReplicaTable renders results as an aligned table with a summary line.
 func printReplicaTable(w io.Writer, results []replicaResult) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "#\tstrategy\tseed\tmoves\tsolved\ttime\tnodes")

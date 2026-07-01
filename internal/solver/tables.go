@@ -7,27 +7,22 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// Shared pruning tables, built once on first use and cached to disk.
-
 const (
 	nUDSlice   = 495
 	nSlicePerm = 24
 )
 
 var (
-	// Phase 1 (domino reduction) heuristics, indexed by combined coordinates.
 	twistSliceOnce sync.Once
 	twistSlice     []uint8
 	flipSliceOnce  sync.Once
 	flipSlice      []uint8
 
-	// Phase 2 heuristics.
 	cornSliceOnce sync.Once
 	cornSlice     []uint8
 	edge8Once     sync.Once
 	edge8Slice    []uint8
 
-	// Small single-coordinate heuristics for the generic search solvers.
 	cornOriOnce  sync.Once
 	cornOriTab   []uint8
 	edgeOriOnce  sync.Once
@@ -35,7 +30,6 @@ var (
 	cornPermOnce sync.Once
 	cornPermTab  []uint8
 
-	// Exact stage tables for CFOP.
 	crossOnce sync.Once
 	crossTab  []uint8
 	pairOnce  [4]sync.Once
@@ -78,7 +72,6 @@ func phase2Tables() ([]uint8, []uint8) {
 	return cornSlice, edge8Slice
 }
 
-// phase1Heuristic estimates moves to reach the domino group.
 func phase1Heuristic() search.Heuristic {
 	ts, fs := phase1Tables()
 	return func(c cube.Cube) int {
@@ -88,7 +81,6 @@ func phase1Heuristic() search.Heuristic {
 	}
 }
 
-// phase2Heuristic estimates moves to solve from within the domino group.
 func phase2Heuristic() search.Heuristic {
 	cs, es := phase2Tables()
 	return func(c cube.Cube) int {
@@ -101,7 +93,7 @@ func phase2Heuristic() search.Heuristic {
 func cornerOriTable() []uint8 {
 	cornOriOnce.Do(func() {
 		cornOriTab = search.LoadOrBuild("corner_ori", func() []uint8 {
-			return search.BuildBFS(2187, func(c cube.Cube) int { return twistCoord(c) }, search.AllMoves)
+			return search.BuildBFS(2187, twistCoord, search.AllMoves)
 		})
 	})
 	return cornOriTab
@@ -110,7 +102,7 @@ func cornerOriTable() []uint8 {
 func edgeOriTable() []uint8 {
 	edgeOriOnce.Do(func() {
 		edgeOriTab = search.LoadOrBuild("edge_ori", func() []uint8 {
-			return search.BuildBFS(2048, func(c cube.Cube) int { return flipCoord(c) }, search.AllMoves)
+			return search.BuildBFS(2048, flipCoord, search.AllMoves)
 		})
 	})
 	return edgeOriTab
@@ -119,7 +111,7 @@ func edgeOriTable() []uint8 {
 func cornerPermTable() []uint8 {
 	cornPermOnce.Do(func() {
 		cornPermTab = search.LoadOrBuild("corner_perm", func() []uint8 {
-			return search.BuildBFS(40320, func(c cube.Cube) int { return cornPermCoord(c) }, search.AllMoves)
+			return search.BuildBFS(40320, cornPermCoord, search.AllMoves)
 		})
 	})
 	return cornPermTab

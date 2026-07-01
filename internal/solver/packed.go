@@ -2,20 +2,11 @@ package solver
 
 import "github.com/danielriddell21/rubix/pkg/cube"
 
-// packed.go is the "Binary State" from video 1: the cube packed into two 64-bit
-// integers so the greedy search can apply moves and score positions with register-only
-// bit operations instead of array shuffling. cube.Cube stays the I/O model; this is
-// used only inside the descent solvers' hot loop.
-//
-// Layout: each location is a 5-bit slot. Edges (12 slots in `edges`): bits 0–3 = edge
-// id (0–11), bit 4 = orientation (0/1). Corners (8 slots in `corners`): bits 0–2 =
-// corner id (0–7), bits 3–4 = orientation (0–2).
 type state struct {
 	edges   uint64
 	corners uint64
 }
 
-// solved is the packed solved cube.
 var solved = func() state {
 	var e, c uint64
 	for i := range 12 {
@@ -27,7 +18,6 @@ var solved = func() state {
 	return state{e, c}
 }()
 
-// pack converts a cube.Cube to its packed form.
 func pack(cu cube.Cube) state {
 	var e, c uint64
 	for i := range 12 {
@@ -41,9 +31,6 @@ func pack(cu cube.Cube) state {
 
 func (s state) isSolved() bool { return s == solved }
 
-// A turn moves exactly four edges and four corners; the rest stay. For each move we
-// keep a mask of the unchanged slots and the (dest, src, orientation-delta) of the four
-// that move, so apply is a mask plus four slot shuffles per ring.
 type slotMove struct{ dst, src, delta uint8 }
 
 var (
@@ -53,7 +40,6 @@ var (
 	cornerMoves [cube.NumMoves][4]slotMove
 )
 
-// co3[x] = x mod 3 for x in 0..4 (a corner orientation 0..2 plus a delta 0..2).
 var co3 = [5]uint64{0, 1, 2, 0, 1}
 
 func init() {
@@ -87,7 +73,6 @@ func init() {
 	}
 }
 
-// apply returns the state after move m.
 func (s state) apply(m cube.Move) state {
 	ne := s.edges & edgeKeep[m]
 	for _, e := range &edgeMoves[m] {
@@ -103,8 +88,6 @@ func (s state) apply(m cube.Move) state {
 	return state{ne, nc}
 }
 
-// solvedCount is the number of cubies in their solved location AND orientation — a
-// slot equals its location index exactly when both id and orientation are correct.
 func (s state) solvedCount() int {
 	n := 0
 	for i := range 12 {
@@ -120,7 +103,6 @@ func (s state) solvedCount() int {
 	return n
 }
 
-// orientedEdgeCount is the number of correctly-oriented edges (orientation bit clear).
 func (s state) orientedEdgeCount() int {
 	n := 0
 	for i := range 12 {
@@ -131,7 +113,6 @@ func (s state) orientedEdgeCount() int {
 	return n
 }
 
-// orientedCornerCount is the number of correctly-oriented corners (orientation 0).
 func (s state) orientedCornerCount() int {
 	n := 0
 	for i := range 8 {
@@ -142,8 +123,6 @@ func (s state) orientedCornerCount() int {
 	return n
 }
 
-// middleInMiddle is the number of middle-layer edges (ids 8–11) currently in the four
-// middle-layer slots (8–11) — they need not be in the right slot, just the layer.
 func (s state) middleInMiddle() int {
 	n := 0
 	for i := 8; i < 12; i++ {
@@ -154,19 +133,14 @@ func (s state) middleInMiddle() int {
 	return n
 }
 
-// dominoScore rewards the three "domino" requirements: oriented edges, the four
-// middle edges in the middle layer, and oriented corners (maxes at 24).
 func (s state) dominoScore() int {
 	return s.orientedEdgeCount() + s.middleInMiddle() + s.orientedCornerCount()
 }
 
-// inDomino reports whether the cube is in the domino state: all edges and corners
-// oriented and the middle edges confined to the middle layer.
 func inDominoState(s state) bool {
 	return s.orientedEdgeCount() == 12 && s.orientedCornerCount() == 8 && s.middleInMiddle() == 4
 }
 
-// applyAll returns the state after a sequence of moves.
 func (s state) applyAll(ms []cube.Move) state {
 	for _, m := range ms {
 		s = s.apply(m)
@@ -174,5 +148,4 @@ func (s state) applyAll(ms []cube.Move) state {
 	return s
 }
 
-// edgesAllOriented reports whether every edge is correctly oriented.
 func edgesAllOriented(s state) bool { return s.orientedEdgeCount() == 12 }

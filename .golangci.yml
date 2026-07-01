@@ -1,49 +1,81 @@
 version: "2"
 
-run:
-  timeout: 5m
-
 linters:
-  default: none
+  default: standard
   enable:
-    - errcheck
-    - govet
-    - staticcheck
+    - dupl
+    - cyclop
+    - errorlint
+    - gocognit
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - prealloc
     - revive
-    - ineffassign
-    - unused
+    - thelper
+    - unconvert
+    - unparam
+    - whitespace
+    - wrapcheck
   settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    cyclop:
+      max-complexity: 15
+    gocognit:
+      min-complexity: 20
+    revive:
+      rules:
+        - name: exported
+          arguments: [disableStutteringCheck]
     errcheck:
-      # Writes to stdout/stderr/tabwriter: a failed terminal write is not actionable.
       exclude-functions:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
-    revive:
-      rules:
-        - name: exported
-        - name: error-return
-        - name: error-naming
-        - name: error-strings
-        - name: increment-decrement
-        - name: var-naming
-        - name: package-comments
-        - name: indent-error-flow
-        - name: superfluous-else
-        - name: unused-parameter
-          disabled: true
+    gosec:
+      excludes:
+        - G107
+        - G115
+        - G204
+        - G304
+        - G404
+        - G602
+        - G703
   exclusions:
+    paths:
+      - examples
     rules:
-      - path: _test\.go
+      - path: (^|/)(internal|cmd)/
         linters:
-          - errcheck
           - revive
+      - path: "_test\\.go"
+        linters:
+          - revive
+          - dupl
+          - wrapcheck
+          - gosec
+          - unparam
+          - gocognit
+          - cyclop
+          - prealloc
+          - errcheck
+          - gocritic
+          - noctx
 
 formatters:
   enable:
-    - gofmt
+    - gofumpt
     - goimports
-
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  exclusions:
+    paths:
+      - examples
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/danielriddell21/rubix

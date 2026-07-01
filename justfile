@@ -6,46 +6,56 @@ default:
     @just --list
 
 # build the headless binary
+[group('build')]
 build:
     go build ./...
 
-# build everything, including the ebiten visualizer
-build-gui:
-    go build -tags ebiten ./...
-
 # run the tests
+[group('test')]
 test:
     go test ./...
 
-# run the tests, including ebiten-tagged code
-test-gui:
-    go test -tags ebiten ./...
-
-# format the code
-fmt:
-    gofmt -w .
-
-# vet the code
-vet:
-    go vet ./...
-
-# lint (needs golangci-lint that supports this module's Go version)
+# run the linter
+[group('dev')]
 lint:
     golangci-lint run
 
-# tidy go.mod / go.sum
+# format the code
+[group('dev')]
+fmt:
+    golangci-lint fmt
+
+# tidy module dependencies
+[group('dev')]
 tidy:
     go mod tidy
 
-# solve & compare many cubes, e.g. `just replica "-count 8 -compare"`
+# full gate: lint + test + build. all must pass before committing
+[group('dev')]
+ci: lint test build
+
+# build everything, including the ebiten visualizer
+[group('build')]
+build-gui:
+    go build -tags ebiten ./...
+
+# run the tests, including ebiten-tagged code
+[group('test')]
+test-gui:
+    go test -tags ebiten ./...
+
+# solve & compare many cubes, e.g. `just replica "--count 8 --compare"`
+[group('run')]
 replica args="":
     go run ./cmd/rubix replica {{args}}
 
 # open the self-driving visualizer (needs the ebiten build)
+[group('run')]
 view:
     go run -tags ebiten ./cmd/rubix view
 
 # record one GIF per keybind into docs/demos/ (needs the ebiten build and a display)
+[group('run')]
 demos:
     mkdir -p docs/demos
     go run -tags ebiten ./cmd/rubix view --seed 1 --record docs/demos/unfold.gif       --record-keys space

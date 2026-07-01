@@ -1,5 +1,7 @@
 # rubix
 
+*n.* the unscrambling of the cube — modelled as data, solved in code.
+
 [![CI](https://github.com/danielriddell21/rubix/actions/workflows/ci.yaml/badge.svg)](https://github.com/danielriddell21/rubix/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/danielriddell21/rubix/graph/badge.svg)](https://codecov.io/gh/danielriddell21/rubix)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=danielriddell21_rubix&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=danielriddell21_rubix)
@@ -20,19 +22,19 @@ Requires Go 1.26+.
 
 ```sh
 go run ./cmd/rubix solvers                       # list the solvers
-go run ./cmd/rubix scramble -n 25 -seed 1        # a scramble + its facelet string
+go run ./cmd/rubix scramble --n 25 --seed 1        # a scramble + its facelet string
 go run ./cmd/rubix solve --input <54-chars> --strategy multi
 ```
 
 `--execute` prints the robot move/primitive plan; `verify`, `scan` and `gen-tables`
 are the other subcommands.
 
-`solve`, `replica`/`compare`, `scramble` and `solvers` take `-format json|csv` and
-`-output <file>` for machine-readable results, e.g.:
+`solve`, `replica`/`compare`, `scramble` and `solvers` take `--format json|csv` and
+`--output <file>` for machine-readable results, e.g.:
 
 ```sh
-go run ./cmd/rubix replica -count 8 -seed 1 -format csv -output results.csv
-go run ./cmd/rubix solve --input <54-chars> --strategy multi -format json
+go run ./cmd/rubix replica --count 8 --seed 1 --format csv --output results.csv
+go run ./cmd/rubix solve --input <54-chars> --strategy multi --format json
 ```
 
 ## Watch it solve
@@ -106,6 +108,11 @@ default build is pure-Go:
 | headless (default) | `go build ./...` |
 | with visualizer | `go build -tags ebiten ./...` |
 | EV3 brick | `CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -tags ev3 -o rubix-ev3 ./cmd/rubix` |
+
+## Documentation
+
+- [Demos](docs/demos.md)
+- [Limitations](docs/limitations.md)
 
 ## References
 

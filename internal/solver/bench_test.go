@@ -6,8 +6,6 @@ import (
 	"github.com/danielriddell21/rubix/pkg/cube"
 )
 
-// BenchmarkSolve tracks the throughput of the complete solvers on a fixed scramble, so
-// performance regressions show up over time. Tables are warmed once before timing.
 func BenchmarkSolve(b *testing.B) {
 	scramble := cube.ScrambledCube(25, 42)
 	if warm, err := Get("prune"); err == nil {

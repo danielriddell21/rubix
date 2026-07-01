@@ -1,10 +1,27 @@
-# Build artifacts
-/rubix
-/rubix-ev3
-*.exe
-
-# GoReleaser output
+# Build output
+/bin/
 /dist/
 
-# Generated pruning-table cache
+# Go build & test artifacts
+*.exe
+*.test
+*.out
+*.prof
+coverage.txt
+coverage.html
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+*~
+
+# Env / local
+.env
+.env.local
+.claude/
+
+# Project-specific
+/rubix
+/rubix-ev3
 /tables/*.prt
