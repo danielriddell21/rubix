@@ -74,9 +74,10 @@ type cubeView struct {
 	frame      int
 	lastSolved bool
 
-	turning   bool
-	turnFrame int
-	turnMove  cube.Move
+	turning    bool
+	turnFrame  int
+	turnMove   cube.Move
+	manualTurn bool
 }
 
 func (v *cubeView) kickSolve() {
@@ -124,13 +125,24 @@ func (v *cubeView) advanceSolve(unfold float32) {
 		if v.turnFrame++; v.turnFrame >= turnFrames {
 			v.turning = false
 			v.c.Apply(v.turnMove)
-			v.idx++
+			if v.manualTurn {
+				v.manualTurn = false // a by-hand turn: the solution index stays put
+			} else {
+				v.idx++
+			}
 		}
 		return
 	}
 	if v.idx < len(v.moves) {
 		v.turning, v.turnFrame, v.turnMove = true, 0, v.moves[v.idx]
 	}
+}
+
+func (v *cubeView) applyManual(m cube.Move) {
+	if v.turning {
+		return
+	}
+	v.turning, v.turnFrame, v.turnMove, v.manualTurn = true, 0, m, true
 }
 
 func (v *cubeView) strategy() string {
@@ -196,6 +208,7 @@ type gameState struct {
 
 	focus     int
 	showMoves bool
+	manual    bool
 
 	rec       *recorder
 	recPath   string
@@ -492,18 +505,25 @@ func (g *gameState) handleKeys() {
 	if g.keyTapped(ebiten.KeyX) {
 		g.xray = !g.xray
 	}
-	if g.keyTapped(ebiten.KeyR) {
-		for _, v := range g.views {
-			v.rescramble(v.ctrl.Scramble)
-		}
-		g.send(Msg{Type: "rescramble"}) // make the other windows rescramble too
+	if g.keyTapped(ebiten.KeyEnter) || g.keyTapped(ebiten.KeyKPEnter) {
+		g.toggleManual()
 	}
-	if g.keyTapped(ebiten.KeyS) {
-		v := g.views[g.focus]
-		if len(v.ctrl.Strategies) > 0 {
-			v.stratIdx = (v.stratIdx + 1) % len(v.ctrl.Strategies)
-			v.label = fmt.Sprintf("#%d %s", g.focus, v.strategy())
-			v.kickSolve()
+	if g.manual {
+		g.handleManualMoves()
+	} else {
+		if g.keyTapped(ebiten.KeyR) {
+			for _, v := range g.views {
+				v.rescramble(v.ctrl.Scramble)
+			}
+			g.send(Msg{Type: "rescramble"}) // make the other windows rescramble too
+		}
+		if g.keyTapped(ebiten.KeyS) {
+			v := g.views[g.focus]
+			if len(v.ctrl.Strategies) > 0 {
+				v.stratIdx = (v.stratIdx + 1) % len(v.ctrl.Strategies)
+				v.label = fmt.Sprintf("#%d %s", g.focus, v.strategy())
+				v.kickSolve()
+			}
 		}
 	}
 	if g.keyTapped(ebiten.KeyTab) && g.grid() {
@@ -528,6 +548,50 @@ func (g *gameState) handleCountKeys() {
 			g.send(Msg{Type: "remove"})
 		} else {
 			g.setCount(len(g.views) - 1)
+		}
+	}
+}
+
+func (g *gameState) toggleManual() {
+	g.manual = !g.manual
+	v := g.views[g.focus]
+	if g.manual {
+		v.gen++ // discard any in-flight solve so it can't repopulate the move list
+		v.moves, v.idx, v.turning, v.solving = nil, 0, false, false
+		v.start = v.c
+		return
+	}
+	v.start = v.c
+	v.kickSolve()
+}
+
+var manualFaces = []struct {
+	key  ebiten.Key
+	face int
+}{
+	{ebiten.KeyU, 0},
+	{ebiten.KeyR, 1},
+	{ebiten.KeyF, 2},
+	{ebiten.KeyD, 3},
+	{ebiten.KeyL, 4},
+	{ebiten.KeyB, 5},
+}
+
+func (g *gameState) handleManualMoves() {
+	prime := g.keyDown(ebiten.KeyShiftLeft) || g.keyDown(ebiten.KeyShiftRight)
+	v := g.views[g.focus]
+	for _, fk := range manualFaces {
+		if !g.keyTapped(fk.key) {
+			continue
+		}
+		m := cube.Move(fk.face * 3) // clockwise quarter turn
+		if prime {
+			m = cube.Move(fk.face*3 + 2) // counter-clockwise
+		}
+		if g.unfold >= 0.5 {
+			v.c.Apply(m) // no turn animation while unfolded to the flat net
+		} else {
+			v.applyManual(m)
 		}
 	}
 }
@@ -599,12 +663,19 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 
 	fv := g.views[g.focus]
 	if !g.grid() {
-		ebitenutil.DebugPrintAt(screen, fv.status(), 12, 12)
+		status := fv.status()
+		if g.manual {
+			status = "MANUAL — turn the cube by hand"
+		}
+		ebitenutil.DebugPrintAt(screen, status, 12, 12)
 	}
-	segments := []string{
-		"drag/arrows: orbit", "wheel: zoom", "space: unfold", "x: x-ray",
-		"r: scramble", "s: solver", "m: moves", "+/-: cubes",
+	segments := []string{"drag/arrows: orbit", "wheel: zoom", "space: unfold", "x: x-ray"}
+	if g.manual {
+		segments = append(segments, "U R F D L B: turn (shift: prime)", "enter: resume")
+	} else {
+		segments = append(segments, "r: scramble", "s: solver", "enter: manual")
 	}
+	segments = append(segments, "m: moves", "+/-: cubes")
 	if g.grid() {
 		segments = append(segments, "tab: focus")
 	}
