@@ -1,5 +1,7 @@
 package gui
 
+import "github.com/danielriddell21/crucible/hub"
+
 type Msg struct {
 	Type      string  `json:"t"`
 	Yaw       float32 `json:"yaw,omitempty"`
@@ -10,7 +12,7 @@ type Msg struct {
 	ShowMoves bool    `json:"showMoves,omitempty"`
 }
 
-type Link struct {
-	In  <-chan Msg
-	Out chan<- Msg
-}
+// Link is the window's channel pair to the multi-window hub. It aliases the
+// engine's generic hub link specialised to Msg, so the leader and child
+// wiring in internal/cli can hand the window a hub.Link[Msg] directly.
+type Link = hub.Link[Msg]

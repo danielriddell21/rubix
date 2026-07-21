@@ -15,6 +15,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
+	"github.com/danielriddell21/crucible/record"
+
 	"github.com/danielriddell21/rubix/pkg/cube"
 	"github.com/danielriddell21/rubix/pkg/render"
 )
@@ -210,7 +212,7 @@ type gameState struct {
 	showMoves bool
 	manual    bool
 
-	rec       *recorder
+	rec       *record.Recorder
 	recPath   string
 	recFrames int
 	recSaved  bool
@@ -431,12 +433,12 @@ func (g *gameState) tickRecording() (stop bool, err error) {
 		return false, nil
 	}
 	g.frame++
-	if g.rec.len() < g.recFrames {
+	if g.rec.Len() < g.recFrames {
 		return false, nil
 	}
 	if !g.recSaved {
-		if err := g.rec.save(g.recPath); err != nil {
-			return true, err
+		if err := g.rec.Save(g.recPath); err != nil {
+			return true, fmt.Errorf("save recording: %w", err)
 		}
 		g.recSaved = true
 	}
@@ -690,11 +692,11 @@ func (g *gameState) Draw(screen *ebiten.Image) {
 		g.drawMoveList(screen, fv)
 	}
 
-	if g.rec != nil && g.rec.len() < g.recFrames {
+	if g.rec != nil && g.rec.Len() < g.recFrames {
 		w, h := screen.Bounds().Dx(), screen.Bounds().Dy()
 		buf := make([]byte, 4*w*h)
 		screen.ReadPixels(buf)
-		g.rec.add(&image.RGBA{Pix: buf, Stride: 4 * w, Rect: image.Rect(0, 0, w, h)})
+		g.rec.Add(&image.RGBA{Pix: buf, Stride: 4 * w, Rect: image.Rect(0, 0, w, h)})
 	}
 }
 
@@ -935,7 +937,7 @@ func Run(cfg Config) error {
 		if g.recFrames < 1 {
 			g.recFrames = 120
 		}
-		g.rec = newRecorder(ctrl.RecordScale, ctrl.RecordFPS)
+		g.rec = record.NewRecorder(ctrl.RecordFPS, ctrl.RecordScale, 0)
 		g.script = buildScript(ctrl.RecordKeys, g.recFrames)
 	}
 	for _, v := range g.views {
