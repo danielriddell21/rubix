@@ -931,13 +931,15 @@ func Run(cfg Config) error {
 	g.views = []*cubeView{newSingleView(ctrl)}
 	g.cols, g.rows = gridDims(len(g.views))
 	g.w, g.h = windowSize(g.cols, g.rows)
-	if ctrl.Record != "" {
-		g.recPath = ctrl.Record
-		g.recFrames = ctrl.RecordFrames
+	if ctrl.Rec.Recording() {
+		g.recPath = ctrl.Rec.Path
+		g.recFrames = ctrl.Rec.Frames
 		if g.recFrames < 1 {
 			g.recFrames = 120
 		}
-		g.rec = record.NewRecorder(ctrl.RecordFPS, ctrl.RecordScale, 0)
+		// maxFrames stays 0: rubix caps the recording itself so the scripted
+		// keybinds and the frame budget stay in step.
+		g.rec = record.NewRecorder(ctrl.Rec.FPS, ctrl.Rec.Scale, 0)
 		g.script = buildScript(ctrl.RecordKeys, g.recFrames)
 	}
 	for _, v := range g.views {

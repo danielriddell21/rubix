@@ -3,7 +3,7 @@ module github.com/danielriddell21/rubix
 go 1.26.3
 
 require (
-	github.com/danielriddell21/crucible v0.1.0
+	github.com/danielriddell21/crucible v0.7.1-0.20260722210514-3eee45c01f17
 	github.com/ev3go/ev3dev v0.0.0-20230218223055-ac0bd47ba218
 	github.com/hajimehoshi/ebiten/v2 v2.9.9
 	github.com/spf13/cobra v1.10.2

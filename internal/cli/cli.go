@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/danielriddell21/crucible/record"
+
 	"github.com/danielriddell21/rubix/internal/gui"
 	"github.com/danielriddell21/rubix/internal/robot"
 	"github.com/danielriddell21/rubix/internal/solver"
@@ -178,26 +180,19 @@ func finishSolve(o solveOpts, r robot.Robot, c cube.Cube, moves []cube.Move) err
 }
 
 type recordOpts struct {
-	path   string
-	frames int
-	fps    int
-	scale  int
-	keys   string
+	record.Options
+	keys string
 }
 
 func (o *recordOpts) register(f *pflag.FlagSet) {
-	f.StringVar(&o.path, "record", "", "record the visualizer to this GIF path, then exit (needs -tags ebiten)")
-	f.IntVar(&o.frames, "record-frames", 120, "number of frames to capture when recording")
-	f.IntVar(&o.fps, "record-fps", 25, "GIF playback frames per second")
-	f.IntVar(&o.scale, "record-scale", 2, "integer downscale factor for the recorded GIF")
+	// Preserve rubix's own defaults; the shared flag names come from crucible.
+	o.Frames, o.FPS, o.Scale = 120, 25, 2
+	o.AddFlags(f)
 	f.StringVar(&o.keys, "record-keys", "", "comma-separated keybinds to script while recording (e.g. space, x, left, shift+up, tab)")
 }
 
 func (o *recordOpts) apply(ctrl gui.Controller) gui.Controller {
-	ctrl.Record = o.path
-	ctrl.RecordFrames = o.frames
-	ctrl.RecordFPS = o.fps
-	ctrl.RecordScale = o.scale
+	ctrl.Rec = o.Options
 	ctrl.RecordKeys = o.keys
 	return ctrl
 }
@@ -380,7 +375,7 @@ func viewCmd() *cobra.Command {
 			// cube windows.
 			ctrl := rec.apply(guiController(nil, strategyIndex("multi"), seed))
 			switch {
-			case ctrl.Record != "":
+			case ctrl.Rec.Recording():
 				// recording is single-process and uncoordinated
 				if err := gui.Run(gui.Config{Controller: ctrl}); err != nil {
 					return fmt.Errorf("run gui: %w", err)
