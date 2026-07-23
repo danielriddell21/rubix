@@ -16,6 +16,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/danielriddell21/crucible/record"
+	"github.com/danielriddell21/crucible/window"
 
 	"github.com/danielriddell21/rubix/pkg/cube"
 	"github.com/danielriddell21/rubix/pkg/render"
@@ -946,19 +947,21 @@ func Run(cfg Config) error {
 		v.kickSolve()
 	}
 	g.lastSent = g.shared() // suppress an initial publish; all windows start identical
-	ebiten.SetWindowSize(g.w, g.h)
 	title := ctrl.Title
 	if title == "" {
 		title = "rubix"
 	}
-	ebiten.SetWindowTitle(title)
+	if g.rec == nil {
+		// The user may resize the window; Layout reflows the scene to the new size.
+		window.Configure(window.Options{Title: title, Width: g.w, Height: g.h, MinWidth: winW / 2, MinHeight: winH / 2})
+	} else {
+		// During recording the window stays a fixed size so the GIF dimensions are stable.
+		ebiten.SetWindowSize(g.w, g.h)
+		ebiten.SetWindowTitle(title)
+	}
 	if ctrl.OffsetIndex > 0 {
 		// Cascade child windows so they don't open exactly on top of the leader.
 		ebiten.SetWindowPosition(60+ctrl.OffsetIndex*36, 60+ctrl.OffsetIndex*36)
-	}
-	if g.rec == nil {
-		// Let the user resize the window; Layout reflows the scene to the new size.
-		ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	}
 	if link != nil {
 		// Coordinated windows must keep updating while unfocused, so background windows
