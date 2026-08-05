@@ -4,32 +4,14 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
-
 jobs:
   goreleaser:
-    # macOS so the cgo/Metal Ebiten GUI cask can be built natively (a Linux clang
-    # cannot cross-build a darwin cgo binary). The CGO-free CLI cross-compiles fine here.
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version: stable
-      - uses: actions/create-github-app-token@v3
-        id: tap-token
-        with:
-          app-id: ${{ vars.TAP_APP_ID }}
-          private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
-          owner: danielriddell21
-          repositories: homebrew-tap
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
+    # macOS so the cgo/Metal darwin binary can be built natively; a Linux
+    # clang cannot cross-build one.
+    uses: danielriddell21/github-actions/.github/workflows/release.yaml@v1
+    permissions:
+      contents: write
+    with:
+      runs-on: macos-latest
+    secrets:
+      tap-app-private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
