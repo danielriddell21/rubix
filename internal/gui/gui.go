@@ -7,43 +7,18 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"sort"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
+	"github.com/danielriddell21/crucible/canvas"
 	"github.com/danielriddell21/crucible/record"
 	"github.com/danielriddell21/crucible/window"
 
 	"github.com/danielriddell21/rubix/pkg/cube"
 	"github.com/danielriddell21/rubix/pkg/render"
-)
-
-const (
-	winW        = 640
-	winH        = 640
-	scale       = 40
-	turnFrames  = 9
-	netFrames   = 8
-	orbitSpeed  = 0.035
-	zoomSpeed   = 0.04
-	unfoldSpeed = 0.04
-
-	cellSize = 320
-	maxWin   = 1280
-	maxCells = 16
-)
-
-var (
-	plastic    = color.RGBA{34, 34, 40, 255}
-	outline    = color.RGBA{12, 12, 14, 255}
-	background = color.RGBA{30, 30, 36, 255}
-	focusLine  = color.RGBA{200, 200, 80, 255}
-	cellLine   = color.RGBA{70, 70, 80, 255}
-	highlight  = color.RGBA{70, 70, 30, 255}
 )
 
 var whiteSub *ebiten.Image
@@ -53,6 +28,17 @@ func init() {
 	w.Fill(color.White)
 	whiteSub = w.SubImage(image.Rect(1, 1, 2, 2)).(*ebiten.Image)
 }
+
+const (
+	winH        = 640
+	netFrames   = 8
+	orbitSpeed  = 0.035
+	zoomSpeed   = 0.04
+	unfoldSpeed = 0.04
+	cellSize    = 320
+	maxWin      = 1280
+	maxCells    = 16
+)
 
 func Available() bool { return true }
 
@@ -214,6 +200,7 @@ type gameState struct {
 	manual    bool
 
 	rec       *record.Recorder
+	canvas    *canvas.Canvas
 	recPath   string
 	recFrames int
 	recSaved  bool
@@ -642,150 +629,33 @@ func (g *gameState) send(m Msg) bool {
 }
 
 func (g *gameState) Draw(screen *ebiten.Image) {
-	screen.Fill(background)
-	cw := float32(g.w) / float32(g.cols)
-	ch := float32(g.h) / float32(g.rows)
-	px := scale * g.zoom
-	if g.grid() {
-		px = scale * g.zoom * min(cw, ch) / winW
+	if g.canvas == nil || func() bool { w, h := g.canvas.Size(); return w != g.w || h != g.h }() {
+		g.canvas = canvas.New(g.w, g.h)
 	}
-
-	for k, v := range g.views {
-		col, row := k%g.cols, k/g.cols
-		ox, oy := float32(col)*cw, float32(row)*ch
-		g.drawView(screen, v, ox+cw/2, oy+ch/2, px)
-		if g.grid() {
-			line := cellLine
-			if k == g.focus {
-				line = focusLine
-			}
-			vector.StrokeRect(screen, ox, oy, cw, ch, 1, line, false)
-			ebitenutil.DebugPrintAt(screen, v.label+"  "+v.shortStatus(), int(ox)+6, int(oy)+6)
-		}
-	}
-
-	fv := g.views[g.focus]
-	if !g.grid() {
-		status := fv.status()
-		if g.manual {
-			status = "MANUAL — turn the cube by hand"
-		}
-		ebitenutil.DebugPrintAt(screen, status, 12, 12)
-	}
-	segments := []string{"drag/arrows: orbit", "wheel: zoom", "space: unfold", "x: x-ray"}
-	if g.manual {
-		segments = append(segments, "U R F D L B: turn (shift: prime)", "enter: resume")
-	} else {
-		segments = append(segments, "r: scramble", "s: solver", "enter: manual")
-	}
-	segments = append(segments, "m: moves", "+/-: cubes")
-	if g.grid() {
-		segments = append(segments, "tab: focus")
-	}
-	// Wrap to the window width and stack the lines up from the bottom so nothing clips.
-	lines := wrapHelp(segments, g.w-24)
-	const helpLineH = 16
-	for i, line := range lines {
-		ebitenutil.DebugPrintAt(screen, line, 12, g.h-(len(lines)-i)*helpLineH-4)
-	}
-
-	if g.showMoves {
-		g.drawMoveList(screen, fv)
-	}
+	DrawScene(g.canvas, g.scene())
+	screen.WritePixels(g.canvas.Pixels())
 
 	if g.rec != nil && g.rec.Len() < g.recFrames {
-		w, h := screen.Bounds().Dx(), screen.Bounds().Dy()
-		buf := make([]byte, 4*w*h)
-		screen.ReadPixels(buf)
-		g.rec.Add(&image.RGBA{Pix: buf, Stride: 4 * w, Rect: image.Rect(0, 0, w, h)})
+		g.rec.Add(record.FromRGBA(g.canvas.Pixels(), g.w, g.h))
 	}
 }
 
-func (g *gameState) drawView(screen *ebiten.Image, v *cubeView, cx, cy, px float32) {
-	f := v.c.ToFacelets()
-	sinY, cosY := fsincos(g.yaw)
-	sinX, cosX := fsincos(g.pitch)
-	key := render.Normalize(render.Vec3{X: 0.5, Y: 0.8, Z: 0.9})
-	fill := render.Normalize(render.Vec3{X: -0.5, Y: 0.3, Z: 0.4})
-
-	// Current animated turn angle, applied to the moving layer.
-	turnAxis, turnAng := render.TurnAngle(v.turnMove, float32(v.turnFrame)/turnFrames)
-	tsin, tcos := fsincos(turnAng)
-
-	type face2d struct {
-		pts    [4][2]float32
-		depth  float32
-		col    color.RGBA
-		stroke bool
-	}
-	faces := make([]face2d, 0, len(g.polys))
-	for _, p := range g.polys {
-		if g.xray && p.Kind != render.Top {
-			continue // x-ray: drop the plastic body so every side shows through
-		}
-		spin := v.turning && render.InTurnLayer(v.turnMove, p.Center)
-		var pts [4][2]float32
-		var depth float32
-		for i := range 4 {
-			pv := render.Lerp(p.Cube[i], p.Net[i], g.unfold)
-			if spin {
-				pv = render.RotateAxis(pv, turnAxis, tsin, tcos)
-			}
-			pv = render.RotateCamera(pv, sinY, cosY, sinX, cosX)
-			pts[i] = [2]float32{cx + pv.X*px, cy - pv.Y*px}
-			depth += pv.Z
-		}
-		n := p.Normal
-		if spin {
-			n = render.RotateAxis(n, turnAxis, tsin, tcos)
-		}
-		n = render.RotateCamera(n, sinY, cosY, sinX, cosX)
-		lit := min(1, 0.6+0.32*max(0, render.Dot(n, key))+0.18*max(0, render.Dot(n, fill)))
-		base := plastic
-		if p.Kind == render.Top {
-			base = render.FaceletColor(f[int(p.Face)*9+p.Cell])
-		}
-		col := shade(base, lit)
-		if g.xray {
-			col.A = 125
-		}
-		faces = append(faces, face2d{pts: pts, depth: depth / 4, col: col, stroke: p.Kind == render.Top && !g.xray})
-	}
-	sort.Slice(faces, func(i, j int) bool { return faces[i].depth < faces[j].depth })
-	for _, fc := range faces {
-		fillQuad(screen, fc.pts, fc.col)
-		if fc.stroke {
-			strokeQuad(screen, fc.pts)
+// scene lifts the drawable state out of the game so the composer needs nothing
+// from the display.
+func (g *gameState) scene() SceneView {
+	cubes := make([]CubeView, len(g.views))
+	for i, v := range g.views {
+		cubes[i] = CubeView{
+			Facelets: v.c.ToFacelets(), Label: v.label, Status: v.status(), Short: v.shortStatus(),
+			Turning: v.turning, TurnMove: v.turnMove, TurnFrame: v.turnFrame,
+			Idx: v.idx, Moves: v.moves,
 		}
 	}
-}
-
-func (g *gameState) drawMoveList(screen *ebiten.Image, v *cubeView) {
-	if len(v.moves) == 0 {
-		return
-	}
-	const lineH, colW = 16, 92
-	x0, y0 := g.w-colW, 30
-	capRows := (g.h - y0 - 24) / lineH
-	if capRows < 1 {
-		capRows = 1
-	}
-	last := min(v.idx, len(v.moves)-1) // reveal up to the current move
-	start := 0
-	if last-start+1 > capRows {
-		start = last - capRows + 1
-	}
-
-	played := min(v.idx, len(v.moves))
-	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("moves %d/%d", played, len(v.moves)), x0, 12)
-	for row, i := 0, start; i <= last; row, i = row+1, i+1 {
-		y := y0 + row*lineH
-		marker := "  "
-		if i == v.idx && v.idx < len(v.moves) {
-			vector.FillRect(screen, float32(x0-2), float32(y-1), colW, lineH, highlight, false)
-			marker = "> "
-		}
-		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s%2d %s", marker, i+1, v.moves[i].String()), x0, y)
+	return SceneView{
+		Cubes: cubes, Cols: g.cols, Rows: g.rows, W: g.w, H: g.h, Focus: g.focus,
+		Yaw: g.yaw, Pitch: g.pitch, Zoom: g.zoom, Unfold: g.unfold,
+		Xray: g.xray, Manual: g.manual, ShowMoves: g.showMoves, Grid: g.grid(),
+		Polys: g.polys,
 	}
 }
 
@@ -815,29 +685,6 @@ func fitMonitor(w, h int) (int, int) {
 	return w, h
 }
 
-func wrapHelp(segs []string, maxWidth int) []string {
-	const glyph = 6
-	const sep = "   "
-	var lines []string
-	cur := ""
-	for _, s := range segs {
-		cand := s
-		if cur != "" {
-			cand = cur + sep + s
-		}
-		if cur != "" && len(cand)*glyph > maxWidth {
-			lines = append(lines, cur)
-			cur = s
-		} else {
-			cur = cand
-		}
-	}
-	if cur != "" {
-		lines = append(lines, cur)
-	}
-	return lines
-}
-
 func fillQuad(screen *ebiten.Image, q [4][2]float32, col color.RGBA) {
 	var path vector.Path
 	path.MoveTo(q[0][0], q[0][1])
@@ -862,17 +709,6 @@ func strokeQuad(screen *ebiten.Image, q [4][2]float32) {
 		j := (i + 1) % 4
 		vector.StrokeLine(screen, q[i][0], q[i][1], q[j][0], q[j][1], 1.2, outline, true)
 	}
-}
-
-func shade(c color.RGBA, f float32) color.RGBA {
-	f = clamp(f, 0, 1)
-	return color.RGBA{uint8(float32(c.R) * f), uint8(float32(c.G) * f), uint8(float32(c.B) * f), c.A}
-}
-
-func clamp(v, lo, hi float32) float32 { return max(lo, min(hi, v)) }
-func fsincos(a float32) (float32, float32) {
-	s, c := math.Sincos(float64(a))
-	return float32(s), float32(c)
 }
 
 func gridDims(n int) (cols, rows int) {
