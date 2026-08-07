@@ -20,29 +20,6 @@ var (
 	highlight  = color.RGBA{70, 70, 30, 255}
 )
 
-func wrapHelp(segs []string, maxWidth int) []string {
-	const glyph = 6
-	const sep = "   "
-	var lines []string
-	cur := ""
-	for _, s := range segs {
-		cand := s
-		if cur != "" {
-			cand = cur + sep + s
-		}
-		if cur != "" && len(cand)*glyph > maxWidth {
-			lines = append(lines, cur)
-			cur = s
-		} else {
-			cur = cand
-		}
-	}
-	if cur != "" {
-		lines = append(lines, cur)
-	}
-	return lines
-}
-
 func shade(c color.RGBA, f float32) color.RGBA {
 	f = clamp(f, 0, 1)
 	return color.RGBA{uint8(float32(c.R) * f), uint8(float32(c.G) * f), uint8(float32(c.B) * f), c.A}

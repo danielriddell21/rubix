@@ -8,9 +8,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-
-	"github.com/danielriddell21/crucible/record"
 
 	"github.com/danielriddell21/rubix/internal/gui"
 	"github.com/danielriddell21/rubix/internal/robot"
@@ -100,7 +97,6 @@ type solveOpts struct {
 	execute  bool
 	view     bool
 	fmtOpts  formatOpts
-	rec      recordOpts
 }
 
 func solveCmd() *cobra.Command {
@@ -120,7 +116,6 @@ func solveCmd() *cobra.Command {
 	f.StringVar(&o.strategy, "strategy", "prune", "solver: "+strings.Join(solver.Names(), ", "))
 	f.BoolVar(&o.execute, "execute", false, "run the solution on the robot")
 	f.BoolVar(&o.view, "view", false, "animate the solution in the visualizer (needs -tags ebiten)")
-	o.rec.register(f)
 	o.fmtOpts.register(f)
 	return cmd
 }
@@ -172,29 +167,11 @@ func finishSolve(o solveOpts, r robot.Robot, c cube.Cube, moves []cube.Move) err
 		}
 	}
 	if o.view {
-		if err := gui.Run(gui.Config{Controller: o.rec.apply(guiController(&c, strategyIndex(o.strategy), 0))}); err != nil {
+		if err := gui.Run(gui.Config{Controller: guiController(&c, strategyIndex(o.strategy), 0)}); err != nil {
 			return fmt.Errorf("run gui: %w", err)
 		}
 	}
 	return nil
-}
-
-type recordOpts struct {
-	record.Options
-	keys string
-}
-
-func (o *recordOpts) register(f *pflag.FlagSet) {
-	// Preserve rubix's own defaults; the shared flag names come from crucible.
-	o.Frames, o.FPS, o.Scale = 120, 25, 2
-	o.AddFlags(f)
-	f.StringVar(&o.keys, "record-keys", "", "comma-separated keybinds to script while recording (e.g. space, x, left, shift+up, tab)")
-}
-
-func (o *recordOpts) apply(ctrl gui.Controller) gui.Controller {
-	ctrl.Rec = o.Options
-	ctrl.RecordKeys = o.keys
-	return ctrl
 }
 
 func guiController(initial *cube.Cube, start int, seed int64) gui.Controller {
@@ -362,7 +339,6 @@ func viewCmd() *cobra.Command {
 	var (
 		seed  int64
 		child int
-		rec   recordOpts
 	)
 	cmd := &cobra.Command{
 		Use:          "view",
@@ -373,14 +349,8 @@ func viewCmd() *cobra.Command {
 			// The visualizer is self-driving: it scrambles and solves on its own; press "r"
 			// for a new scramble, "s" to switch solver, and "+"/"-" to open or close more
 			// cube windows.
-			ctrl := rec.apply(guiController(nil, strategyIndex("multi"), seed))
+			ctrl := guiController(nil, strategyIndex("multi"), seed)
 			switch {
-			case ctrl.Rec.Recording():
-				// recording is single-process and uncoordinated
-				if err := gui.Run(gui.Config{Controller: ctrl}); err != nil {
-					return fmt.Errorf("run gui: %w", err)
-				}
-				return nil
 			case child >= 0:
 				ctrl.Title = fmt.Sprintf("rubix #%d", child)
 				ctrl.OffsetIndex = child
@@ -391,8 +361,14 @@ func viewCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.Int64Var(&seed, "seed", 0, "scramble seed (0 = random each run); set for reproducible recordings")
+	f.Int64Var(&seed, "seed", 0, "scramble seed (0 = random each run); set to replay the same scrambles")
 	f.IntVar(&child, "child", -1, "internal: run as a coordinated child window with this index")
-	rec.register(f)
 	return cmd
+}
+
+// DemoController builds the visualizer controller the documentation clips
+// record: the self-driving multi-solver view, scrambling from a fixed seed so
+// every run replays identically. tools/demogen is its only caller.
+func DemoController(seed int64) gui.Controller {
+	return guiController(nil, strategyIndex("multi"), seed)
 }

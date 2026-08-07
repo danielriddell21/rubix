@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/danielriddell21/crucible/canvas"
+	"github.com/danielriddell21/crucible/keymap"
 
 	"github.com/danielriddell21/rubix/pkg/cube"
 	"github.com/danielriddell21/rubix/pkg/render"
@@ -122,21 +123,43 @@ func drawCube(c *canvas.Canvas, g SceneView, v CubeView, cx, cy, px float32) {
 	}
 }
 
+// helpPad insets the control bar from the window edges.
+const helpPad = 12
+
+// helpFace tells keymap how wide the canvas's built-in face draws, so the bar
+// wraps where it actually runs out of room.
+var helpFace = keymap.Face{
+	LineHeight: helpLineH,
+	Measure:    func(s string) int { return len(s) * canvas.GlyphWidth },
+}
+
 func drawHelp(c *canvas.Canvas, g SceneView) {
-	segments := []string{"drag/arrows: orbit", "wheel: zoom", "space: unfold", "x: x-ray"}
+	hints := []keymap.Binding{
+		{Key: "drag/arrows", Action: "orbit"},
+		{Key: "wheel", Action: "zoom"},
+		{Key: "space", Action: "unfold"},
+		{Key: "x", Action: "x-ray"},
+	}
 	if g.Manual {
-		segments = append(segments, "U R F D L B: turn (shift: prime)", "enter: resume")
+		hints = append(hints,
+			keymap.Binding{Key: "U R F D L B", Action: "turn (shift: prime)"},
+			keymap.Binding{Key: "enter", Action: "resume"})
 	} else {
-		segments = append(segments, "r: scramble", "s: solver", "enter: manual")
+		hints = append(hints,
+			keymap.Binding{Key: "r", Action: "scramble"},
+			keymap.Binding{Key: "s", Action: "solver"},
+			keymap.Binding{Key: "enter", Action: "manual"})
 	}
-	segments = append(segments, "m: moves", "+/-: cubes")
+	hints = append(hints,
+		keymap.Binding{Key: "m", Action: "moves"},
+		keymap.Binding{Key: "+/-", Action: "cubes"})
 	if g.Grid {
-		segments = append(segments, "tab: focus")
+		hints = append(hints, keymap.Binding{Key: "tab", Action: "focus"})
 	}
-	// Wrap to the window width and stack the lines up from the bottom so nothing clips.
-	lines := wrapHelp(segments, g.W-24)
-	for i, line := range lines {
-		c.Text(12, g.H-(len(lines)-i)*helpLineH-4+textAscent, line, colText)
+	// BottomBar wraps to the window width and stacks the rows up from the
+	// bottom, so nothing clips however many hints the mode adds.
+	for _, line := range keymap.BottomBar(hints, g.W, g.H, helpPad, helpFace) {
+		c.Text(line.X, line.Y+textAscent, line.Text, colText)
 	}
 }
 
