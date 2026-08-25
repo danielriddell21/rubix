@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/danielriddell21/rubix/actions/workflows/ci.yaml/badge.svg)](https://github.com/danielriddell21/rubix/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/danielriddell21/rubix/graph/badge.svg)](https://codecov.io/gh/danielriddell21/rubix)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=danielriddell21_rubix&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=danielriddell21_rubix)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=danielriddell21_rubix2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=danielriddell21_rubix2)
 [![Go Reference](https://pkg.go.dev/badge/github.com/danielriddell21/rubix/pkg/cube.svg)](https://pkg.go.dev/github.com/danielriddell21/rubix/pkg/cube)
 [![Go 1.26](https://img.shields.io/badge/go-1.26-blue)](https://go.dev)
 [![MIT License](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
