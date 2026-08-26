@@ -167,7 +167,9 @@ func finishSolve(o solveOpts, r robot.Robot, c cube.Cube, moves []cube.Move) err
 		}
 	}
 	if o.view {
-		if err := gui.Run(gui.Config{Controller: guiController(&c, strategyIndex(o.strategy), 0)}); err != nil {
+		// SA4023: without -tags ebiten the stub Run always errors, so staticcheck
+		// reads this as constant. It is not, in the build that has a GUI.
+		if err := gui.Run(gui.Config{Controller: guiController(&c, strategyIndex(o.strategy), 0)}); err != nil { //nolint:staticcheck
 			return fmt.Errorf("run gui: %w", err)
 		}
 	}

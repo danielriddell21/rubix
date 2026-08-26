@@ -38,7 +38,9 @@ func hubConfig() hub.Config[gui.Msg] {
 }
 
 func runWindow(ctrl gui.Controller, l gui.Link) error {
-	if err := gui.Run(gui.Config{Controller: ctrl, Link: &l}); err != nil {
+	// SA4023: without -tags ebiten the stub Run always errors, so staticcheck
+	// reads this as constant. It is not, in the build that has a GUI.
+	if err := gui.Run(gui.Config{Controller: ctrl, Link: &l}); err != nil { //nolint:staticcheck
 		return fmt.Errorf("run gui: %w", err)
 	}
 	return nil
