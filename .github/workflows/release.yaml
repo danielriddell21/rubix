@@ -5,13 +5,19 @@ on:
     tags: ["v*"]
 
 jobs:
-  goreleaser:
-    # macOS so the cgo/Metal darwin binary can be built natively; a Linux
-    # clang cannot cross-build one.
-    uses: danielriddell21/github-actions/.github/workflows/release.yaml@v1
+  release:
+    # ubuntu, where the GoReleaser job needed macos: the GUI build no longer
+    # uses cgo, so there is no darwin toolchain to have natively.
+    uses: danielriddell21/github-actions/.github/workflows/release.yaml@v2
     permissions:
       contents: write
     with:
-      runs-on: macos-latest
+      # The headless build's formula comes from letsgo.mod's brew directive.
+      # This is the other half: the gui variant's archives, as a cask.
+      cask-name: rubix
+      cask-variant: gui
+      cask-desc: A Rubik's cube solver with a native macOS 3D visualizer
+      cask-caveats: >-
+        The rubix visualizer opens a window and is macOS-only.
     secrets:
       tap-app-private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
