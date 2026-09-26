@@ -17,8 +17,8 @@ github.com/ev3go/ev3dev v0.0.0-20230218223055-ac0bd47ba218 h1:0CbMwLi0VWA/8jfXAo
 github.com/ev3go/ev3dev v0.0.0-20230218223055-ac0bd47ba218/go.mod h1:czHG1yhHZUpy8SATZBm9bD9mhhfzXJaa2MnG5auKgTM=
 github.com/ev3go/sisyphus v0.0.0-20230218220525-74fbc3041f9b h1:ZuvSyvd1RJ1G4np3Jg1ecyayaAR4cug9vUG40h2XUN4=
 github.com/ev3go/sisyphus v0.0.0-20230218220525-74fbc3041f9b/go.mod h1:hQZTnPqrj8UG7cF8ch0soSKV9yCUqI7jSsdk25AX+sM=
-github.com/hajimehoshi/ebiten/v2 v2.10.2 h1:uNMOpfb/pW7GQRMsSn/pxwrk9rNcgSaIdjKwFZS11LM=
-github.com/hajimehoshi/ebiten/v2 v2.10.2/go.mod h1:47QNgyS/y2ZRkjVUvlGLx8a+F7MSjcn8/GsjcCZ9Rc8=
+github.com/hajimehoshi/ebiten/v2 v2.10.3 h1:+Mw9+CGYAkD/xlTKax/H7vgsuPdlHriJFgXoWTbewac=
+github.com/hajimehoshi/ebiten/v2 v2.10.3/go.mod h1:47QNgyS/y2ZRkjVUvlGLx8a+F7MSjcn8/GsjcCZ9Rc8=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
