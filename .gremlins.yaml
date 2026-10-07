@@ -7,6 +7,7 @@ unleash:
   exclude-files:
     - "cmd/.*"
     - "internal/solver/.*" # its tests take two minutes, and gremlins runs the package's tests once per mutant, so it never finishes
+    - "pkg/render/.*" # draws the cube into pixels; the tests run it, but nothing can assert on a pixel's exact value
     - "internal/gui/.*" # window and drawing wiring
     - "tools/.*" # generates the docs media, like cmd it only wires packages together
 
