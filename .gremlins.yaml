@@ -6,6 +6,9 @@ unleash:
     mutant-coverage: 50 # skip mutants in code with <50% line coverage
   exclude-files:
     - "cmd/.*"
+    - "internal/solver/.*" # its tests take two minutes, and gremlins runs the package's tests once per mutant, so it never finishes
+    - "internal/gui/.*" # window and drawing wiring
+    - "tools/.*" # generates the docs media, like cmd it only wires packages together
 
 mutants:
   arithmetic-base:
